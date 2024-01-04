@@ -2,21 +2,25 @@ from bson import ObjectId
 from pymongo import MongoClient
 
 
-class MongoDatabaseIdDatabase:
-    def __init__(self):
+class MongoDBStudentId:
+    def __init__(self, collection_name="student_id"):
         self.client = MongoClient()
         self.db = self.client["DSL_grade_dbs"]
-        self.collection = self.db["student_id_in_db"]
+        self.collection = self.db[collection_name]
 
-    def add_student_id(self, student_id: str):
+    def add_student_id(self, student_id: str, name: str = "", surname: str = ""):
         """
         Add a new student ID to the database only if it does not exist.
 
         Args:
             student_id (str): The student ID to be added.
+            name (str): The name of the student.
+            surname (str): The surname of the student.
         """
         if not self.collection.find_one({"student_id": student_id}):
-            self.collection.insert_one({"student_id": student_id})
+            self.collection.insert_one(
+                {"student_id": student_id, "name": name, "surname": surname}
+            )
 
     def remove_student_id(self, student_id: str):
         """
@@ -49,7 +53,24 @@ class MongoDatabaseIdDatabase:
             int: The counter value associated with the specified student ID.
         """
         document = self.collection.find_one({"student_id": student_id})
-        return document["_id"] if document is not None else None
+        if not document:
+            raise KeyError(f"Student ID '{student_id}' not found in the database.")
+        return document["_id"]
+
+    def get_student_id_from(self, db_id: ObjectId) -> str | None:
+        """
+        Retrieves the student ID value for a given ObjectID.
+
+        Args:
+            db_id (str): The ObjectID for which to retrieve the student ID value.
+
+        Returns:
+            str: The student ID value associated with the specified ObjectID.
+        """
+        document = self.collection.find_one({"_id": db_id})
+        if not document:
+            raise KeyError(f"Database ID '{db_id}' not found in the database.")
+        return document["student_id"]
 
     def close(self):
         """Close the database"""

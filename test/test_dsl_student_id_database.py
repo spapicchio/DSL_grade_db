@@ -1,14 +1,15 @@
 import pytest
 from bson import ObjectId
 
-from dsl_grade_db.dsl_student_id_database import MongoDatabaseIdDatabase
+from dsl_grade_db.dsl_student_id_database import MongoDBStudentId
 
 
 # Fixture to create an instance of DSLDatabaseIdDatabase for testing
 @pytest.fixture
 def mongo_database():
-    db = MongoDatabaseIdDatabase()
+    db = MongoDBStudentId(collection_name="student_id_test")
     yield db
+    db.collection.drop()
     db.close()
 
 
@@ -65,5 +66,19 @@ def test_get_db_id_from(mongo_database):
 
 def test_get_db_id_from_nonexistent_student_id(mongo_database):
     student_id = "nonexistent"
-    db_id = mongo_database.get_db_id_from(student_id)
-    assert db_id is None
+    with pytest.raises(KeyError):
+        db_id = mongo_database.get_db_id_from(student_id)
+
+
+def test_get_student_id_from(mongo_database):
+    student_id = "123"
+    document = mongo_database.collection.insert_one({"student_id": student_id})
+    retrieved_student_id = mongo_database.get_student_id_from(document.inserted_id)
+    assert retrieved_student_id == student_id
+    mongo_database.remove_student_id(student_id)
+
+
+def test_get_student_id_from_nonexistent_id(mongo_database):
+    nonexistent_db_id = ObjectId()
+    with pytest.raises(KeyError):
+        mongo_database.get_student_id_from(nonexistent_db_id)
