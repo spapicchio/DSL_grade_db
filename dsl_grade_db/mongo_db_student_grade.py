@@ -31,7 +31,7 @@ class MongoDBStudentGrade:
 
     def get_student(self, student_id: str) -> dict:
         """Get a student from the database"""
-        db_id = self._get_db_id_from(student_id)
+        db_id = self._get_db_id_from(str(student_id))
         student = self.collection.find_one({"db_id": db_id})
         return student
 

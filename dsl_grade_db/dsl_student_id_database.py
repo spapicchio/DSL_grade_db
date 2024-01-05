@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 from bson import ObjectId
 from pymongo import MongoClient
 
 
 class MongoDBStudentId:
-    def __init__(self, collection_name="student_id"):
+    def __init__(self, collection_name="student_id_in_db"):
         self.client = MongoClient()
         self.db = self.client["DSL_grade_dbs"]
         self.collection = self.db[collection_name]
@@ -17,9 +19,9 @@ class MongoDBStudentId:
             name (str): The name of the student.
             surname (str): The surname of the student.
         """
-        if not self.collection.find_one({"student_id": student_id}):
+        if not self.collection.find_one({"MATRICOLA": student_id}):
             self.collection.insert_one(
-                {"student_id": student_id, "name": name, "surname": surname}
+                {"MATRICOLA": student_id, "name": name, "surname": surname}
             )
 
     def remove_student_id(self, student_id: str):
@@ -29,7 +31,7 @@ class MongoDBStudentId:
         Args:
             student_id (str): The student ID to be removed.
         """
-        self.collection.delete_one({"student_id": student_id})
+        self.collection.delete_one({"MATRICOLA": student_id})
 
     def update_student_id(self, student_id: str, new_student_id: str):
         """
@@ -39,8 +41,8 @@ class MongoDBStudentId:
             student_id (str): The existing student ID to be updated.
             new_student_id (str): The new student ID to replace the existing one.
         """
-        self.collection.update_one({"student_id": student_id},
-                                   {"$set": {"student_id": new_student_id}})
+        self.collection.update_one({"MATRICOLA": student_id},
+                                   {"$set": {"MATRICOLA": new_student_id}})
 
     def get_db_id_from(self, student_id: str) -> ObjectId | None:
         """
@@ -52,7 +54,9 @@ class MongoDBStudentId:
         Returns:
             int: The counter value associated with the specified student ID.
         """
-        document = self.collection.find_one({"student_id": student_id})
+        if not isinstance(student_id, str):
+            student_id = str(student_id)
+        document = self.collection.find_one({"MATRICOLA": student_id})
         if not document:
             raise KeyError(f"Student ID '{student_id}' not found in the database.")
         return document["_id"]
@@ -70,7 +74,17 @@ class MongoDBStudentId:
         document = self.collection.find_one({"_id": db_id})
         if not document:
             raise KeyError(f"Database ID '{db_id}' not found in the database.")
-        return document["student_id"]
+        return document["MATRICOLA"]
+
+    def set_project_id(self, project_id: str):
+        if not isinstance(project_id, str):
+            project_id = str(project_id)
+        self.collection.update_one({"project_id": "project_id"},
+                                   {'$set': {'id': project_id}},
+                                   upsert=True)
+
+    def get_project_id(self):
+        return self.collection.find_one({"project_id": "project_id"})['id']
 
     def close(self):
         """Close the database"""
