@@ -8,7 +8,8 @@ from dsl_grade_db.mongo_db_student_grade import MongoDBStudentGrade
 OBJECT_ID = ObjectId("626bccb9697a12204fb22ea3")
 DOCUMENT = {"db_id": OBJECT_ID,
             "name": "John Doe",
-            "written_grades": [{"grade": 90}],
+            "written_grades": [{"date": "08/09/2023", "grade": 90},
+                               {"date": "08/09/2022", "grade": 50}],
             "project_grades": [{"project_id": 0,
                                 "leaderboard_grade": 5,
                                 "report_grade": 90,
@@ -80,6 +81,7 @@ def test_set_report_to_correct(mongo_db_student_grade):
 @patch('dsl_grade_db.dsl_student_id_database.MongoDBStudentId')
 def test_get_student_id_to_correct(mock_id, mongo_db_student_grade):
     """Test the returned student id are the ones to be corrected"""
+
     def side_effect_func(value):
         if value == object_ids[0]:
             return student_ids[0]

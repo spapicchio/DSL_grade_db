@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from bson import ObjectId
 from pymongo import MongoClient
 
@@ -44,8 +46,10 @@ class MongoDBStudentGrade:
     def _get_max_written_grade_student(self, student) -> float | None:
         """Get the max written grade of a student"""
         # TODO: this is not the max written grade, but the last one for this version
-        written_grades = student["written_grades"][-1]
-        return written_grades["grade"] if written_grades else None
+        written_grades = student["written_grades"]
+        # order based on date, ascending
+        written_grades.sort(key=lambda x: datetime.strptime(x['date'], '%d/%m/%Y'))
+        return written_grades[-1]["grade"] if written_grades else None
 
     def _get_max_project_grade_student(self, student) -> float | None:
         """Get the max report grade of a student"""
@@ -65,3 +69,19 @@ class MongoDBStudentGrade:
                      {"project_grades.report_grade": {"$exists": False}}]
         })
         return [self.db_id.get_student_id_from(student["db_id"]) for student in students]
+
+    def update_student_project_grade(self, student_id: str, project_grades: list):
+        """Update the project grade of a student"""
+        db_id = self.db_id.get_db_id_from(student_id)
+        self.collection.update_one({"db_id": db_id},
+                                   {"$set": {"project_grades": project_grades}})
+
+    def update_student_written_grade(self, student_id: str, written_grades: list):
+        """Update the written grade of a student"""
+        db_id = self.db_id.get_db_id_from(student_id)
+        self.collection.update_one({"db_id": db_id},
+                                   {"$set": {"written_grades": written_grades}})
+
+    def close(self):
+        """Close the database"""
+        self.client.close()
