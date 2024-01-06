@@ -126,8 +126,15 @@ students = [
 The report grades are assigned to the same project_id ONLY IF the "max written exams" is higher than threshold
 
 # How to access students?
-- MongoDBStudentGrade().get_students_project_session() returns all the students with the last project completed
-- MongoDBStudentGrade().update_students_have_rejected(students: list) remove the last written/projects because rejection
-- MongoDBStudentGrade().remove_student(student: dict) remove the student when they accept the grade
+```python
+# returns all the students with the last project completed
+MongoDBStudentGrade().get_students_project_session()
+
+# remove the last written/projects because rejection
+MongoDBStudentGrade().update_students_have_rejected(students: list)
+
+# remove the student when they accept the grade
+MongoDBStudentGrade().remove_student(student: dict)
+```
 
 
