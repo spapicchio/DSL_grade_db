@@ -24,7 +24,7 @@ def side_effect_func(value):
 def mongo_db_student_grade():
     # Create MongoDBStudentGrade with the mocked MongoDBStudentId
     with patch('dsl_grade_db.mongo_db_student_grade.MongoDBStudentId') as mock_student_id:
-        db = MongoDBStudentGrade(collection_name="student_grade_test")
+        db = MongoDBStudentGrade(database_name="DSL_grade_test")
         db.collection.insert_many(
             [
                 {  # this student has no project grades
@@ -94,9 +94,7 @@ def teams_df(tmp_path):
 
 def test_consume_documents_in_leaderboard(leaderboard_df, teams_df,
                                           tmp_path, mongo_db_student_grade):
-    db = MongoDBTeamsGrade(leaderboard_collection_name="leaderboard_grade_test",
-                           student_collection_name="student_grade_test",
-                           teams_collections_grade="teams_grade_test",
+    db = MongoDBTeamsGrade(database_name="DSL_grade_test",
                            leaderboard_csv_file_path=os.path.join(tmp_path,
                                                                   "leaderboard.csv"),
                            teams_csv_file_path=os.path.join(tmp_path, "teams.csv"))
@@ -120,9 +118,7 @@ def test_consume_documents_in_leaderboard(leaderboard_df, teams_df,
 
 def test_consume_documents_in_teams(leaderboard_df, teams_df,
                                     tmp_path, mongo_db_student_grade):
-    db = MongoDBTeamsGrade(leaderboard_collection_name="leaderboard_grade_test",
-                           student_collection_name="student_grade_test",
-                           teams_collections_grade="teams_grade_test",
+    db = MongoDBTeamsGrade(database_name="DSL_grade_test",
                            leaderboard_csv_file_path=os.path.join(tmp_path,
                                                                   "leaderboard.csv"),
                            teams_csv_file_path=os.path.join(tmp_path, "teams.csv"))
@@ -138,7 +134,7 @@ def test_consume_documents_in_teams(leaderboard_df, teams_df,
     student_2 = mongo_db_student_grade.get_student("122")
     assert len(student_2["project_grades"]) == 1
     assert student_2["project_grades"][0]['leaderboard_grade'] == 5 \
-              and student_2["project_grades"][0]['final_grade'] == 10
+           and student_2["project_grades"][0]['final_grade'] == 10
     # the third student has already a complete project, append the new one
     student_3 = mongo_db_student_grade.get_student("121")
     assert len(student_3["project_grades"]) == 2

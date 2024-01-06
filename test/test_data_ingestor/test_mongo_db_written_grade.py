@@ -22,7 +22,7 @@ def side_effect_func(value):
 def mongo_db_student_grade():
     # Create MongoDBStudentGrade with the mocked MongoDBStudentId
     with patch('dsl_grade_db.mongo_db_student_grade.MongoDBStudentId') as mock_student_id:
-        db = MongoDBStudentGrade(collection_name="student_grade_test")
+        db = MongoDBStudentGrade(database_name="DSL_grade_test")
         db.collection.insert_many(
             [
                 {  # this student has no written grades
@@ -155,8 +155,7 @@ def test_parse_written_csv_file(written_grade_df, tmp_path):
 
 
 def test_consume_written_grade(mongo_db_student_grade, written_grade_df, tmp_path):
-    db = MongoDBWrittenGrade(written_collection_name="written_grade_test",
-                             student_collection_name="student_grade_test",
+    db = MongoDBWrittenGrade(database_name="DSL_grade_test",
                              written_csv_file_path=os.path.join(tmp_path,
                                                                 'written_grade.csv'))
     db.student_coll = mongo_db_student_grade

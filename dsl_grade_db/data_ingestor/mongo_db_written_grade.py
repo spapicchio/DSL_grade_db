@@ -4,17 +4,16 @@ from datetime import datetime
 import pandas as pd
 from pymongo import MongoClient
 
-from dsl_grade_db.mongo_db_student_grade import MongoDBStudentGrade
+from .. import MongoDBStudentGrade
 
 
 class MongoDBWrittenGrade:
-    def __init__(self, written_collection_name="written_grade",
-                 student_collection_name="student_grade",
+    def __init__(self, database_name="DSL_grade_dbs",
                  written_csv_file_path="written_grade.csv"):
         self.client = MongoClient()
-        self.db = self.client["DSL_grade_dbs"]
-        self.written_coll = self.db[written_collection_name]
-        self.student_coll: MongoDBStudentGrade = self.db[student_collection_name]
+        self.db = self.client[database_name]
+        self.written_coll = self.db['written_grade']
+        self.student_coll = MongoDBStudentGrade(database_name=database_name)
         self.written_df = self._parse_written_csv_file(pd.read_csv(written_csv_file_path))
         self._insert_in_collections(self.written_coll, self.written_df)
 

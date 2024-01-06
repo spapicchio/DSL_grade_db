@@ -5,13 +5,11 @@ from dsl_grade_db.mongo_db_student_grade import MongoDBStudentGrade
 
 
 class MongoDBReportGrade:
-    def __init__(self, report_collection_name="report_grade",
-                 student_collection_name="student_grade",
-                 report_csv_file_path="report_grade.csv"):
+    def __init__(self, database_name, report_csv_file_path):
         self.client = MongoClient()
-        self.db = self.client["DSL_grade_dbs"]
-        self.report_coll = self.db[report_collection_name]
-        self.student_coll: MongoDBStudentGrade = self.db[student_collection_name]
+        self.db = self.client[database_name]
+        self.report_coll = self.db["report_grade"]
+        self.student_coll = MongoDBStudentGrade(database_name=database_name)
         self.report_csv_file_path = report_csv_file_path
 
     def _read_and_insert(self, df, collection):

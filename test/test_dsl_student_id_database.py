@@ -7,7 +7,7 @@ from dsl_grade_db.dsl_student_id_database import MongoDBStudentId
 # Fixture to create an instance of DSLDatabaseIdDatabase for testing
 @pytest.fixture
 def mongo_database():
-    db = MongoDBStudentId(collection_name="student_id_db_test")
+    db = MongoDBStudentId(database_name="DSL_grade_test")
     yield db
     db.collection.drop()
     db.close()
@@ -15,27 +15,31 @@ def mongo_database():
 
 # Test for adding a student ID
 def test_add_student_id(mongo_database):
-    student_id = "123"
-    mongo_database.add_student_id(student_id)
-    assert mongo_database.collection.find_one({"MATRICOLA": student_id}) is not None
+    document = {'MATRICOLA': "123"}
+    mongo_database.add_student_id(document)
+    assert mongo_database.collection.find_one(
+        {"MATRICOLA": document['MATRICOLA']}) is not None
     # remove the student ID otherwise it will be present in the database!
-    mongo_database.remove_student_id(student_id)
+    mongo_database.remove_student_id(document['MATRICOLA'])
 
 
 def test_add_student_id_twice(mongo_database):
     """the counter must not increase"""
-    student_id = "123"
-    mongo_database.add_student_id(student_id)
-    mongo_database.add_student_id(student_id)
-    assert mongo_database.collection.find_one({"MATRICOLA": student_id}) is not None
-    assert mongo_database.collection.count_documents({"MATRICOLA": student_id}) == 1
+    document = {'MATRICOLA': "123"}
+    mongo_database.add_student_id(document)
+    mongo_database.add_student_id(document)
+    assert mongo_database.collection.find_one(
+        {"MATRICOLA": document['MATRICOLA']}) is not None
+    assert mongo_database.collection.count_documents(
+        {"MATRICOLA": document['MATRICOLA']}) == 1
     # remove the student ID otherwise it will be present in the database!
-    mongo_database.remove_student_id(student_id)
+    mongo_database.remove_student_id(document['MATRICOLA'])
 
 
 def test_remove_student_id(mongo_database):
     student_id = "456"
-    mongo_database.add_student_id(student_id)
+    document = {'MATRICOLA': student_id}
+    mongo_database.add_student_id(document)
     mongo_database.remove_student_id(student_id)
     assert mongo_database.collection.find_one({"MATRICOLA": student_id}) is None
 
@@ -43,7 +47,7 @@ def test_remove_student_id(mongo_database):
 def test_update_student_id(mongo_database):
     student_id = "789"
     new_student_id = "999"
-    mongo_database.add_student_id(student_id)
+    mongo_database.add_student_id({'MATRICOLA': student_id})
     key_student_id = mongo_database.get_db_id_from(student_id)
     mongo_database.update_student_id(student_id, new_student_id)
     key_new_student_id = mongo_database.get_db_id_from(new_student_id)
@@ -56,7 +60,7 @@ def test_update_student_id(mongo_database):
 
 def test_get_db_id_from(mongo_database):
     student_id = "111"
-    mongo_database.add_student_id(student_id)
+    mongo_database.add_student_id({'MATRICOLA': student_id})
     db_id = mongo_database.get_db_id_from(student_id)
     assert db_id is not None
     assert isinstance(db_id, ObjectId)

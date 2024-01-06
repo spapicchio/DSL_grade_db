@@ -5,24 +5,22 @@ from pymongo import MongoClient
 
 
 class MongoDBStudentId:
-    def __init__(self, collection_name="student_id_in_db"):
+    def __init__(self, database_name="DSL_grade_dbs"):
         self.client = MongoClient()
-        self.db = self.client["DSL_grade_dbs"]
-        self.collection = self.db[collection_name]
+        self.db = self.client[database_name]
+        self.collection = self.db["enrolled_students"]
 
-    def add_student_id(self, student_id: str, name: str = "", surname: str = ""):
+    def add_student_id(self, document: dict):
         """
-        Add a new student ID to the database only if it does not exist.
+        Add a new student ID to the database ONLY IF it does not exist yet.
 
         Args:
-            student_id (str): The student ID to be added.
-            name (str): The name of the student.
-            surname (str): The surname of the student.
+            document (dict): The document to be added to the database.
         """
+        document["MATRICOLA"] = str(document["MATRICOLA"])
+        student_id = document['MATRICOLA']
         if not self.collection.find_one({"MATRICOLA": student_id}):
-            self.collection.insert_one(
-                {"MATRICOLA": student_id, "name": name, "surname": surname}
-            )
+            self.collection.insert_one(document)
 
     def remove_student_id(self, student_id: str):
         """
@@ -41,6 +39,10 @@ class MongoDBStudentId:
             student_id (str): The existing student ID to be updated.
             new_student_id (str): The new student ID to replace the existing one.
         """
+        if not isinstance(student_id, str):
+            student_id = str(student_id)
+        if not isinstance(new_student_id, str):
+            new_student_id = str(new_student_id)
         self.collection.update_one({"MATRICOLA": student_id},
                                    {"$set": {"MATRICOLA": new_student_id}})
 

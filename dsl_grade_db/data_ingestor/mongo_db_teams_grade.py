@@ -8,19 +8,17 @@ class MongoDBTeamsGrade:
     """
     The core idea is that for each team we have maximum Grade.
     If the student is not assigned to any team we create one team with the maximum grade.
+    We need both files because we want to use the idea of the "teams" only if there is
+    a submission to the leaderboard in order to update the project grades.
     """
 
-    def __init__(self, leaderboard_collection_name="leaderboard_grade",
-                 student_collection_name="student_grade",
-                 teams_collections_grade="teams_grade",
-                 leaderboard_csv_file_path="leaderboard_csv",
-                 teams_csv_file_path="teams_csv"):
+    def __init__(self, database_name, leaderboard_csv_file_path, teams_csv_file_path):
 
         self.client = MongoClient()
-        self.db = self.client["DSL_grade_dbs"]
-        self.leaderboard_coll = self.db[leaderboard_collection_name]
-        self.teams_coll = self.db[teams_collections_grade]
-        self.student_coll: MongoDBStudentGrade = self.db[student_collection_name]
+        self.db = self.client[database_name]
+        self.leaderboard_coll = self.db["leaderboard_grade"]
+        self.teams_coll = self.db["teams_grade"]
+        self.student_coll = MongoDBStudentGrade(database_name=database_name)
         # read leaderboard and add to collection
         self.leaderboard_csv_file_path = leaderboard_csv_file_path
         self.teams_csv_file_path = teams_csv_file_path
@@ -36,7 +34,7 @@ class MongoDBTeamsGrade:
             # from "1/3/2023 22:17:06" to "1/3/2023"
             df['project_id'] = df['Timestamp'].apply(lambda x: x.split(' ')[0])
             self.set_project_date(df['project_id'][0])
-            df['max_lead_grade'] = 0 # set it to zero in case of no update
+            df['max_lead_grade'] = -1  # set it to -1 in case of no update
         collection.insert_many(df.to_dict('records'))
 
     def consume_documents_in_leaderboard(self):
@@ -93,8 +91,9 @@ class MongoDBTeamsGrade:
 
     def consume_documents_in_teams(self):
         """update the students from teams collection"""
+
         # TODO What happen if one team does not have any leaderboard submission?
-        # TODO Now we set everything to 0 so in case it is saved as zero
+        # TODO Now we set everything to 0
         def update_student(student_id_, team_):
             if student_id_:  # update only if it exists
                 student_ = self.student_coll.get_student(student_id_)
@@ -118,7 +117,11 @@ class MongoDBTeamsGrade:
             # update the project grade
             for project in project_grades:
                 if project['project_id'] == team['project_id']:
-                    if 'leaderboard_grade' not in project:
+                    # update only if there is at least one submission to leaderboard
+                    # the initial value of max_lead_grade is -1
+                    # in this way the student that does not submit to leaderboard
+                    # will not have this project in the database
+                    if 'leaderboard_grade' not in project and team['max_lead_grade'] >= 0:
                         project['leaderboard_grade'] = float(team['max_lead_grade'])
                         project['final_grade'] += float(team['max_lead_grade'])
                         project['team_info'] = team

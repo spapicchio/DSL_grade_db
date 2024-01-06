@@ -24,7 +24,7 @@ def side_effect_func(value):
 def mongo_db_student_grade():
     # Create MongoDBStudentGrade with the mocked MongoDBStudentId
     with patch('dsl_grade_db.mongo_db_student_grade.MongoDBStudentId') as mock_student_id:
-        db = MongoDBStudentGrade(collection_name="student_grade_test")
+        db = MongoDBStudentGrade(database_name="DSL_grade_test")
         db.collection.insert_many([
             {  # this student has no project grades
                 "student_id": "123",
@@ -85,8 +85,7 @@ def report_df(tmp_path):
 
 @pytest.fixture
 def mongo_db_report(report_df, tmp_path, mongo_db_student_grade):
-    db = MongoDBReportGrade(report_collection_name="report_grade_test",
-                            student_collection_name="student_grade_test",
+    db = MongoDBReportGrade(database_name="DSL_grade_test",
                             report_csv_file_path=os.path.join(tmp_path, "report.csv"))
     db.student_coll = mongo_db_student_grade
     return db
