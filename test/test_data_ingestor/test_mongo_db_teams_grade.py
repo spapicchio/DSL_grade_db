@@ -10,7 +10,10 @@ from dsl_grade_db.mongo_db_student_grade import MongoDBStudentGrade
 
 
 def side_effect_func(value):
-    if isinstance(value, int):
+    if not isinstance(value, str):
+        if isinstance(value, float):
+            # catch error 123.0 -> "123"
+            value = int(value)
         value = str(value)
     if value == "123":
         return ObjectId("6595497c6adac1c7b70c33f6")
@@ -95,32 +98,30 @@ def teams_df(tmp_path):
 def test_consume_documents_in_leaderboard(leaderboard_df, teams_df,
                                           tmp_path, mongo_db_student_grade):
     db = MongoDBTeamsGrade(database_name="DSL_grade_test",
-                           leaderboard_csv_file_path=os.path.join(tmp_path,
-                                                                  "leaderboard.csv"),
+                           leaderboard_csv_file_path=os.path.join(tmp_path, "leaderboard.csv"),
                            teams_csv_file_path=os.path.join(tmp_path, "teams.csv"))
     db.student_coll = mongo_db_student_grade
 
-    db.consume_documents_in_leaderboard()
+    df_teams = db.consume_documents_in_leaderboard()
     # create a new team with one student
-    # TODO possible error with student id saved as string rather than int
-    single_team = db.teams_coll.find_one({"Student ID # 1": 121})
-    assert single_team['max_lead_grade'] == 6
-    assert single_team['project_id'] == "1/3/2023"
-    assert not single_team["Student ID # 2"]
-    # check the team with two students has been updated
-    double_team = db.teams_coll.find_one({"Student ID # 1": 123})
-    assert double_team['max_lead_grade'] == 5
-    assert double_team['project_id'] == "1/3/2023"
-    assert double_team["Student ID # 2"] == 122
-    # drop teams collection
-    db.teams_coll.drop()
+    assert len(df_teams) == 2
+    assert df_teams['Student ID # 1'][1] == 121
+    assert df_teams['Student ID # 2'][1] is None
+    assert df_teams['Student ID # 1'][0] == 123
+    assert df_teams['Student ID # 2'][0] == 122
+    # check max grade
+    assert df_teams['max_lead_grade'][0] == 5
+    assert df_teams['max_lead_grade'][1] == 6
+
+    # check project id
+    assert df_teams['project_id'][0] == "1/3/2023"
+    assert df_teams['project_id'][1] == "1/3/2023"
 
 
 def test_consume_documents_in_teams(leaderboard_df, teams_df,
                                     tmp_path, mongo_db_student_grade):
     db = MongoDBTeamsGrade(database_name="DSL_grade_test",
-                           leaderboard_csv_file_path=os.path.join(tmp_path,
-                                                                  "leaderboard.csv"),
+                           leaderboard_csv_file_path=os.path.join(tmp_path, "leaderboard.csv"),
                            teams_csv_file_path=os.path.join(tmp_path, "teams.csv"))
     db.student_coll = mongo_db_student_grade
     db.consume_documents_in_teams()

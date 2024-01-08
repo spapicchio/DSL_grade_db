@@ -12,10 +12,8 @@ class MongoDBWrittenGrade:
                  written_csv_file_path="written_grade.csv"):
         self.client = MongoClient()
         self.db = self.client[database_name]
-        self.written_coll = self.db['written_grade']
         self.student_coll = MongoDBStudentGrade(database_name=database_name)
         self.written_df = self._parse_written_csv_file(pd.read_csv(written_csv_file_path))
-        self._insert_in_collections(self.written_coll, self.written_df)
 
     @staticmethod
     def _parse_written_csv_file(df):
@@ -37,20 +35,14 @@ class MongoDBWrittenGrade:
         df['student_id'] = df['Username'].map(lambda x: x.split('_')[-1][1:])
         return df
 
-    @staticmethod
-    def _insert_in_collections(collection, df):
-        collection.insert_many(df.to_dict('records'))
+    def consume_written_grades(self):
+        def _update_students(student_id_, written_doc_):
+            student_ = self.student_coll.get_student(student_id_)
+            written_grades = self._update_written_grade(written_doc=written_doc_,
+                                                        written_grades=student_['written_grades'])
+            self.student_coll.update_student_written_grade(student_id_, written_grades)
 
-    def consume_documents(self):
-        for written_doc in self.written_coll.find():
-            student_id = written_doc['student_id']
-            student = self.student_coll.get_student(student_id)
-            written_grades = self._update_written_grade(written_doc=written_doc,
-                                                        written_grades=student[
-                                                            'written_grades'])
-            self.student_coll.update_student_written_grade(student_id, written_grades)
-        # drop the consumed collection
-        self.written_coll.drop()
+        self.written_df.apply(lambda row: _update_students(row['student_id'], row.to_dict()), axis=1)
 
     def _update_written_grade(self, written_doc, written_grades: list[dict]):
         # the written grades are recognized by the date (only one written grade per date)

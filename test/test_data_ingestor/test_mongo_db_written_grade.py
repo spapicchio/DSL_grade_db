@@ -160,7 +160,7 @@ def test_consume_written_grade(mongo_db_student_grade, written_grade_df, tmp_pat
                                                                 'written_grade.csv'))
     db.student_coll = mongo_db_student_grade
 
-    db.consume_documents()
+    db.consume_written_grades()
     # first student should contain only one exam for the date 08/09/2023
     written_grades_student_1 = mongo_db_student_grade.get_student("123")['written_grades']
     assert len(written_grades_student_1) == 1

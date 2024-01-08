@@ -57,6 +57,9 @@ class MongoDBStudentId:
             int: The counter value associated with the specified student ID.
         """
         if not isinstance(student_id, str):
+            if isinstance(student_id, float):
+                # catch error 123.0 -> "123"
+                student_id = int(student_id)
             student_id = str(student_id)
         document = self.collection.find_one({"MATRICOLA": student_id})
         if not document:
