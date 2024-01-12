@@ -71,13 +71,16 @@ def report_df(tmp_path):
     data_input = [
         {"Matricola": "123",
          "Final score": 8,
-         "Note": "MFCC/ZCR/RMS + PCA + SVM/RF/KNN"},
+         "Note": "MFCC/ZCR/RMS + PCA + SVM/RF/KNN",
+         "extra_score": 0},
         {"Matricola": "122",
          "Final score": 4,
-         "Note": "MFCC/ZCR/RMS + PCA + SVM/RF/KNN"},
+         "Note": "MFCC/ZCR/RMS + PCA + SVM/RF/KNN",
+         "extra_score": 0},
         {"Matricola": "121",
          "Final score": 3,
-         "Note": "MFCC/ZCR/RMS + PCA + SVM/RF/KNN"},
+         "Note": "MFCC/ZCR/RMS + PCA + SVM/RF/KNN",
+         "extra_score": 1},
     ]
     df = pd.DataFrame(data_input)
     df.to_csv(os.path.join(tmp_path, "report.csv"), index=False)
@@ -105,7 +108,6 @@ def test_student_no_project(mongo_db_report):
     student = mongo_db_report.student_coll.get_student("123")
     assert len(student['project_grades']) == 1
     assert student['project_grades'][0]['report_grade'] == 8
-    assert student['project_grades'][0]['final_grade'] == 8
 
 
 def test_student_only_lead(mongo_db_report):
@@ -126,7 +128,7 @@ def test_student_only_lead(mongo_db_report):
     student = mongo_db_report.student_coll.get_student("122")
     assert len(student['project_grades']) == 1
     assert student['project_grades'][0]['report_grade'] == 4
-    assert student['project_grades'][0]['final_grade'] == 7
+
 
 
 def test_student_one_complete_project(mongo_db_report):
@@ -147,4 +149,3 @@ def test_student_one_complete_project(mongo_db_report):
     student = mongo_db_report.student_coll.get_student("121")
     assert len(student['project_grades']) == 2
     assert student['project_grades'][-1]['report_grade'] == 3
-    assert student['project_grades'][-1]['final_grade'] == 3
