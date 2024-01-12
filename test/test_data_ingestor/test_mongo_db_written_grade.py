@@ -72,7 +72,7 @@ def written_grade_df(tmp_path):
          "Completato": "8 settembre 2023  09:40",
          "Tempo impiegato": "1 ora 30 min.",
          "Email PDF": "14 settembre 2023  22:55",
-         "Valutazione/20,00": "12,88",
+         "Valutazione/20,00": "12,88",  # Corrected
          "D. 1 /0,00": "-",
          "D. 2 /1,50": "-0,23",
          "D. 3 /1,50": "-0,23",
@@ -92,11 +92,11 @@ def written_grade_df(tmp_path):
          "Nome": "Pippo",
          "Cognome": "Pluto",
          "Stato": "Completato",
-         "Iniziato": "8 settembre 2024  09:40",
-         "Completato": "8 settembre 2024  09:40",
+         "Iniziato": "8 settembre 2023  09:40",
+         "Completato": "8 settembre 2023  09:40",
          "Tempo impiegato": "1 ora 30 min.",
          "Email PDF": "14 settembre 2023  22:55",
-         "Valutazione/20,00": "12.88",
+         "Valutazione/20,00": "",  # EMPTY -> retired
          "D. 1 /0,00": "-",
          "D. 2 /1,50": "-0,23",
          "D. 3 /1,50": "-0,23",
@@ -111,74 +111,177 @@ def written_grade_df(tmp_path):
          "D. 12 /2,00": "0,00",
          "D. 13 /2,00": "1,50"
          },
-        {"Corso": "corso00 - 01TWZSM",
-         "Username": "01twzsm0_it_23_p1070_s121",
-         "Nome": "Max",
-         "Cognome": "Power",
-         "Stato": "Completato",
-         "Iniziato": "8 settembre 2023  09:40",
-         "Completato": "8 settembre 2023  09:40",
-         "Tempo impiegato": "1 ora 30 min.",
-         "Email PDF": "14 settembre 2023  22:55",
-         "Valutazione/20,00": "5,6",
-         "D. 1 /0,00": "-",
-         "D. 2 /1,50": "-0,23",
-         "D. 3 /1,50": "-0,23",
-         "D. 4 /1,50": "1,50",
-         "D. 5 /1,50": "1,50",
-         "D. 6 /2,50": "2,30",
-         "D. 7 /1,50": "1,50",
-         "D. 8 /1,50": "1,50",
-         "D. 9 /1,50": "0,53",
-         "D. 10 /1,50": "1,50",
-         "D. 11 /1,50": "1,50",
-         "D. 12 /2,00": "0,00",
-         "D. 13 /2,00": "1,50"
-         }
     ]
     df = pd.DataFrame(data_input)
     # save on a pytest path
     df.to_csv(os.path.join(tmp_path, 'written_grade.csv'), index=False)
 
 
+@pytest.fixture
+def registered_df(tmp_path):
+    """The registered students for the appeal"""
+    data_input = [
+        {
+            "MATRICOLA": "123",
+            "COGNOME": "Doe",
+            "NOME": "John",
+        },
+        {
+            "MATRICOLA": "122",
+            "COGNOME": "Pluto",
+            "NOME": "Pippo",
+        },
+        {
+            "MATRICOLA": "121",
+            "COGNOME": "Power",
+            "NOME": "Max",
+        },
+    ]
+    df = pd.DataFrame(data_input)
+    df.to_csv(os.path.join(tmp_path, 'registered_student.csv'), index=False)
+
+
 def test_parse_written_csv_file(written_grade_df, tmp_path):
-    df = pd.read_csv(os.path.join(tmp_path, 'written_grade.csv'))
-    df = MongoDBWrittenGrade._parse_written_csv_file(df)
-    assert 'student_id' in df.columns
-    assert df['student_id'].tolist() == ['123', '122', '121']
+    df = MongoDBWrittenGrade._read_written_grade(os.path.join(tmp_path, 'written_grade.csv'))
+    assert df.index.tolist() == ['123', '122']
     assert 'date' in df.columns
-    assert df['date'].tolist() == ['08/09/2023', '08/09/2024', '08/09/2023']
-    columns = ['Valutazione/20,00',
-               'D. 1 /0,00', 'D. 2 /1,50', 'D. 3 /1,50', 'D. 4 /1,50', 'D. 5 /1,50',
-               'D. 6 /2,50', 'D. 7 /1,50', 'D. 8 /1,50', 'D. 9 /1,50', 'D. 10 /1,50',
-               'D. 11 /1,50', 'D. 12 /2,00', 'D. 13 /2,00']
+    assert df['date'].unique() == ['08/09/2023']
 
 
-def test_consume_written_grade(mongo_db_student_grade, written_grade_df, tmp_path):
+@pytest.mark.parametrize("written_grades, written_doc_to_add, result", [
+    (
+            [],  # written_grades
+            {'date': '08/09/2023', 'Valutazione/20,00': 10},  # written_doc_to_add
+            {'date': '08/09/2023', 'grade': 10, "flag_written_exam": 'OK',
+             "written_info": {'date': '08/09/2023', 'Valutazione/20,00': 10}}  # result
+    ),
+    (
+            [],  # written_grades
+            {'date': '08/09/2023', 'Valutazione/20,00': ""},  # written_doc_to_add
+            {'date': '08/09/2023', 'grade': None, "flag_written_exam": 'retired',
+             "written_info": {'date': '08/09/2023', 'Valutazione/20,00': ""}}  # result
+    ),
+    (
+            [{'date': '08/09/2022', 'grade': 10, "written_info": {}}],  # written_grades
+            {'date': '08/09/2023', 'Valutazione/20,00': 10},  # written_doc_to_add
+            {'date': '08/09/2023', 'grade': 10, "flag_written_exam": 'OK',
+             "written_info": {'date': '08/09/2023', 'Valutazione/20,00': 10}}  # result
+
+    ),
+])
+def test_update_written_grade_case_1(written_grades, written_doc_to_add, result, ):
+    # case 1 is when everything is fine, we just need to append the new exam
+    db = MongoDBWrittenGrade(database_name="DSL_grade_test")
+    db.date = '08/09/2023'
+    output = db._update_written_grade(written_doc_to_add, written_grades)
+    assert output[-1] == result
+
+
+@pytest.mark.parametrize("written_grades, written_doc_to_add, result", [
+    (
+            [],  # written_grades
+            {'date': '08/09/2023', 'Valutazione/20,00': ""},  # written_doc_to_add
+            {'date': '08/09/2023', 'grade': None, "flag_written_exam": 'retired',
+             "written_info": {'date': '08/09/2023', 'Valutazione/20,00': ""}}  # result
+    ),
+    (
+            [{'date': '08/09/2023', 'grade': 10, "written_info": {}}],  # written_grades
+            {'date': '08/09/2023', 'Valutazione/20,00': ""},  # written_doc_to_add
+            {'date': '08/09/2023', 'grade': None, "flag_written_exam": 'retired',
+             "written_info": {'date': '08/09/2023', 'Valutazione/20,00': ""}}  # result
+    ),
+])
+def test_update_written_grade_case_2(written_grades, written_doc_to_add, result):
+    # case 1 is when everything is fine, we just need to append the new exam
+    db = MongoDBWrittenGrade(database_name="DSL_grade_test")
+    db.date = '08/09/2023'
+    output = db._update_written_grade(written_doc_to_add, written_grades)
+    assert output[-1] == result
+
+
+@pytest.mark.parametrize("written_grades, written_doc_to_add, result", [
+    (
+            [],  # written_grades
+            None,  # written_doc_to_add
+            {'date': '08/09/2023', 'grade': None, "flag_written_exam": 'absent',
+             "written_info": None}  # result
+    ),
+])
+def test_update_written_grade_case_3(written_grades, written_doc_to_add, result):
+    # case 1 is when everything is fine, we just need to append the new exam
+    db = MongoDBWrittenGrade(database_name="DSL_grade_test")
+    db.date = '08/09/2023'
+    output = db._update_written_grade(written_doc_to_add, written_grades)
+    assert output[-1] == result
+
+
+@pytest.mark.parametrize("written_grades, written_doc_to_add, result", [
+    (
+            [{'date': '08/09/2023', 'grade': 10, "flag_written_exam": 'OK',
+              "written_info": {'date': '08/09/2023', 'Valutazione/20,00': 10}}],  # written_grades
+            {'date': '08/09/2023', 'Valutazione/20,00': ""},  # written_doc_to_add
+            {'date': '08/09/2023', 'grade': None, "flag_written_exam": 'retired',
+             "written_info": {'date': '08/09/2023', 'Valutazione/20,00': ""}}  # result
+    ),
+])
+def test_update_written_grade_case_4(written_grades, written_doc_to_add, result):
+    # case 1 is when everything is fine, we just need to append the new exam
+    db = MongoDBWrittenGrade(database_name="DSL_grade_test")
+    db.date = '08/09/2023'
+    output = db._update_written_grade(written_doc_to_add, written_grades)
+    assert output[-1] == result
+
+
+@pytest.mark.parametrize("written_grades, written_doc_to_add, result", [
+    (
+            [{'date': '08/09/2023', 'grade': 10, "flag_written_exam": 'OK',
+              "written_info": {'date': '08/09/2023', 'Valutazione/20,00': 10}}],  # written_grades
+            None,  # written_doc_to_add
+            {'date': '08/09/2023', 'grade': None, "flag_written_exam": 'absent',
+             "written_info": None}  # result
+    ),
+    (
+            [{'date': '08/09/2022', 'grade': 10, "flag_written_exam": 'OK',
+              "written_info": {'date': '08/09/2023', 'Valutazione/20,00': 10}},
+             {'date': '08/09/2023', 'grade': 10, "flag_written_exam": 'OK',
+              "written_info": {'date': '08/09/2023', 'Valutazione/20,00': 10}}
+             ],  # written_grades
+            None,  # written_doc_to_add
+            {'date': '08/09/2023', 'grade': None, "flag_written_exam": 'absent',
+             "written_info": None}  # result
+    ),
+])
+def test_update_written_grade_case_5(written_grades, written_doc_to_add, result):
+    # case 1 is when everything is fine, we just need to append the new exam
+    db = MongoDBWrittenGrade(database_name="DSL_grade_test")
+    db.date = '08/09/2023'
+    output = db._update_written_grade(written_doc_to_add, written_grades)
+    assert output[-1] == result
+
+
+def test_consume_written_grade(mongo_db_student_grade, written_grade_df, registered_df, tmp_path):
     db = MongoDBWrittenGrade(database_name="DSL_grade_test",
-                             written_csv_file_path=os.path.join(tmp_path,
-                                                                'written_grade.csv'))
+                             written_grade_csv_file_path=os.path.join(tmp_path, 'written_grade.csv'),
+                             registered_student_csv_file_path=os.path.join(tmp_path, 'registered_student.csv'))
     db.student_coll = mongo_db_student_grade
 
-    db.consume_written_grades()
+    db.consume_registered_students()
     # first student should contain only one exam for the date 08/09/2023
     written_grades_student_1 = mongo_db_student_grade.get_student("123")['written_grades']
     assert len(written_grades_student_1) == 1
-    assert written_grades_student_1[0]['date'] == '08/09/2023'
-    assert written_grades_student_1[0]['grade'] == 12.88
-    # second student should contain two exams: one for 08/09/2024 and one for 08/09/2023
+    assert written_grades_student_1[-1]['date'] == '08/09/2023'
+    assert written_grades_student_1[-1]['grade'] == 12.88
+    assert written_grades_student_1[-1]['flag_written_exam'] == 'OK'
+    # second student should contain one update exam
     written_grades_student_2 = mongo_db_student_grade.get_student("122")['written_grades']
-    assert len(written_grades_student_2) == 2
-    for doc in written_grades_student_2:
-        if doc['date'] == '08/09/2024':
-            assert doc['grade'] == 12.88
-        elif doc['date'] == '08/09/2023':
-            continue
-        else:
-            assert False
+    assert len(written_grades_student_2) == 1
+    assert written_grades_student_2[-1]['date'] == '08/09/2023'
+    assert written_grades_student_2[-1]['grade'] == None
+    assert written_grades_student_2[-1]['flag_written_exam'] == 'retired'
 
-    # third student should contain only one exam for the date 08/09/2023
+    # third student should contain only one exam where he does not show
     written_grades_student_3 = mongo_db_student_grade.get_student("121")['written_grades']
     assert len(written_grades_student_3) == 1
-    assert written_grades_student_3[0]['date'] == '08/09/2023'
-    assert written_grades_student_3[0]['grade'] == 5.6
+    assert written_grades_student_3[-1]['date'] == '08/09/2023'
+    assert written_grades_student_3[-1]['grade'] == None
+    assert written_grades_student_3[-1]['flag_written_exam'] == 'absent'
