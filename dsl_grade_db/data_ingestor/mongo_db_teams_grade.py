@@ -20,18 +20,15 @@ class MongoDBTeamsGrade:
         # read leaderboard and add to collection
         self.leaderboard_csv_file_path = leaderboard_csv_file_path
         self.teams_csv_file_path = teams_csv_file_path
-        self.date = None
 
-    def set_project_date(self, date):
-        self.date = date
-        # the date now is present in the database id and can be used by the report
-        self.student_coll.db_id.set_project_id(date)
+    @property
+    def date(self):
+        return self.student_coll.db_id.get_project_id()
 
     def _parse_df(self, df) -> pd.DataFrame:
         if 'Timestamp' in df:  # true only for teams.csv
-            # from "1/3/2023 22:17:06" to "1/3/2023"
-            df['project_id'] = df['Timestamp'].apply(lambda x: x.split(' ')[0])
-            self.set_project_date(df['project_id'][0])
+            # ths is the date of the CURRENT exam session
+            df['project_id'] = self.date
             df['max_lead_grade'] = -1  # set it to -1 in case of no update
         return df
 
@@ -88,34 +85,32 @@ class MongoDBTeamsGrade:
         def update_student(student_id_, team_):
             if student_id_:  # update only if it exists
                 student_ = self.student_coll.get_student(student_id_)
-                project_grades_ = self._update_project_grade(team=team_,
-                                                             project_grades=student_['project_grades'])
-                self.student_coll.update_student_project_grade(student_id_, project_grades_)
+                project_grades_ = self._update_project_grade(team=team_, project_grades=student_['project_grades'])
+                if project_grades_:
+                    self.student_coll.update_student_project_grade(student_id_, project_grades_)
 
         df_teams = self.consume_documents_in_leaderboard()
         df_teams.apply(lambda team: update_team(team.to_dict()), axis=1)
 
-    def _update_project_grade(self, team, project_grades: list):
-        project_date = [project['project_id'] for project in project_grades]
-        if team['project_id'] in project_date:
-            # update the project grade
-            for project in project_grades:
-                if project['project_id'] == team['project_id']:
-                    # update only if there is at least one submission to leaderboard
-                    # the initial value of max_lead_grade is -1
-                    # in this way the student that does not submit to leaderboard
-                    # will not have this project in the database
-                    if 'leaderboard_grade' not in project and team['max_lead_grade'] >= 0:
-                        project['leaderboard_grade'] = float(team['max_lead_grade'])
-                        project['final_grade'] += float(team['max_lead_grade'])
-                        project['team_info'] = team
-                        break
-        else:
-            # initialize the project document
-            project_grades.append({
+    @staticmethod
+    def _update_project_grade(team, project_grades: list):
+        def create_project_dict():
+            return {
                 'project_id': team['project_id'],
+                'flag_project_exam': 'OK',
                 'leaderboard_grade': float(team['max_lead_grade']),
-                'final_grade': float(team['max_lead_grade']),
                 'team_info': team
-            })
+            }
+
+        lead_grad = float(team['max_lead_grade'])
+
+        if project_grades and team['project_id'] == project_grades[-1]['project_id']:
+            project = project_grades.pop()
+            project['leaderboard_grade'] = lead_grad
+            project['team_info'] = team
+        else:
+            project = create_project_dict()
+
+        # if the student has taken the written exam
+        project_grades.append(project)
         return project_grades
