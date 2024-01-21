@@ -5,18 +5,14 @@ from bson import ObjectId
 
 from dsl_grade_db.mongo_db_student_grade import MongoDBStudentGrade
 
-OBJECT_ID = ObjectId("626bccb9697a12204fb22ea3")
-DOCUMENT = {"db_id": OBJECT_ID,
-            "name": "John Doe",
-            "written_grades": [{"date": "08/09/2023", "grade": 90},
-                               {"date": "08/09/2022", "grade": 50}],
-            "project_grades": [{"project_id": 0,
-                                "leaderboard_grade": 5,
-                                "final_grade": 5},
-                               {"project_id": 1,
-                                "leaderboard_grade": 5,
-                                "final_grade": 5}
-                               ]}
+
+def side_effect_func(value):
+    if value == "123":
+        return ObjectId("6595497c6adac1c7b70c33f6")
+    elif value == "122":
+        return ObjectId("6595497c6adac1c7b70c33f5")
+    elif value == "121":
+        return ObjectId("6595497c6adac1c7b70c33f4")
 
 
 @pytest.fixture
@@ -24,22 +20,17 @@ def mongo_db_student_grade():
     # Create MongoDBStudentGrade with the mocked MongoDBStudentId
     with patch('dsl_grade_db.mongo_db_student_grade.MongoDBStudentId') as mock_student_id:
         db = MongoDBStudentGrade(database_name="DSL_grade_test")
-        mock_student_id.get_db_id_from.return_value = OBJECT_ID
-        mock_student_id.get_project_id.return_value = 1
+        mock_student_id.get_db_id_from.side_effect = side_effect_func
+        mock_student_id.get_project_id.return_value = "1/3/2022"
         db.db_id = mock_student_id
         yield db
         db.collection.drop()
         db.client.close()
 
 
-@patch('dsl_grade_db.dsl_student_id_database.MongoDBStudentId')
-def test_get_student(mock_student_id, mongo_db_student_grade):
-    object_id = ObjectId("626bccb9697a12204fb22222")
-    mock_student_id.get_db_id_from.return_value = object_id
-    mongo_db_student_grade.db_id = mock_student_id
-
+def test_get_student(mongo_db_student_grade):
     student_id = "123"
-    document = {"db_id": object_id,
+    document = {"db_id": side_effect_func(student_id),
                 "name": "John Doe",
                 "written_grades": [{"grade": 90}],
                 "project_grades": []}
@@ -50,128 +41,181 @@ def test_get_student(mock_student_id, mongo_db_student_grade):
     assert retrieved_student is not None
     assert retrieved_student["name"] == "John Doe"
     assert retrieved_student["written_grades"][0]["grade"] == 90
-    mongo_db_student_grade.collection.delete_one({"db_id": object_id})
 
 
-def test_get_final_grade_student(mongo_db_student_grade):
-    student_id = "456"
-    mongo_db_student_grade.collection.insert_one(DOCUMENT)
-    final_grade = mongo_db_student_grade.get_final_grade_given(student_id)
-    # no project completed!
-    assert final_grade is None
-    mongo_db_student_grade.collection.delete_one({"db_id": DOCUMENT["db_id"]})
+def test_insert_student(mongo_db_student_grade):
+    student_id = "123"
+    document = {"db_id": side_effect_func(student_id),
+                "MATRICOLA": student_id,
+                "NOME": "John",
+                'COGNOME - (*) Inserito dal docente': "Doe",
+                }
+
+    mongo_db_student_grade.insert_student(document)
+    retrieved_student = mongo_db_student_grade.get_student(student_id)
+
+    assert retrieved_student is not None
+    assert retrieved_student["db_id"] == side_effect_func(student_id)
+    assert retrieved_student["written_grades"] == []
+    assert retrieved_student["project_grades"] == []
 
 
-@patch('dsl_grade_db.dsl_student_id_database.MongoDBStudentId')
-def test_get_student_id_to_correct(mock_id, mongo_db_student_grade):
-    """Test the returned student id are the ones to be corrected"""
+def test_insert_student_twice(mongo_db_student_grade):
+    """if it is already present, insert only once"""
+    student_id = "123"
+    document = {"db_id": side_effect_func(student_id),
+                "MATRICOLA": student_id,
+                "NOME": "John",
+                'COGNOME - (*) Inserito dal docente': "Doe",
+                }
 
-    def side_effect_func(value):
-        if value == object_ids[0]:
-            return student_ids[0]
-        elif value == object_ids[1]:
-            return student_ids[1]
-        elif value == object_ids[2]:
-            return student_ids[2]
-
-    student_ids = ["111", "222", "333"]
-    object_ids = [ObjectId("626bccb9697a12204fb22221"),
-                  ObjectId("626bccb9697a12204fb22222"),
-                  ObjectId("626bccb9697a12204fb22223")]
-
-    mock_id.get_student_id_from.side_effect = side_effect_func
-    mock_id.get_project_id.return_value = 1
-    mongo_db_student_grade.db_id = mock_id
-    # the first student does not participate in the projectID 1
-    # and the written exam is too low
-    mongo_db_student_grade.collection.insert_one(
-        {"student_id": student_ids[0],
-         "db_id": object_ids[0],
-         "written_grades": [{"date": "08/09/2023", "grade": 4}],
-         "project_grades": [{"project_id": 0,
-                             "leaderboard_grade": 5,
-                             "final_grade": 5}]
-         })
-    # the second student has a written exam high,
-    # but the report has already been assigned
-    mongo_db_student_grade.collection.insert_one(
-        {"student_id": student_ids[1],
-         "db_id": object_ids[1],
-         "written_grades": [{"date": "08/09/2023", "grade": 20}],
-         "project_grades": [{"project_id": 1,
-                             "leaderboard_grade": 5,
-                             "report_grade": 5,
-                             "final_grade": 10}]
-         })
-    # the third student has a written exam high, and it participates in the projectID 1
-    mongo_db_student_grade.collection.insert_one(
-        {"student_id": student_ids[2],
-         "db_id": object_ids[2],
-         "written_grades": [{"date": "08/09/2023", "grade": 20}],
-         "project_grades": [{"project_id": 1,
-                             "leaderboard_grade": 0,
-                             "final_grade": 0}]
-         })
-
-    students_to_correct = mongo_db_student_grade.get_student_id_to_correct(threshold=10)
-    # only the last two students because max written grade >= 10
-    assert students_to_correct[0] == student_ids[2]
-
-    students_to_correct = mongo_db_student_grade.get_student_id_to_correct(threshold=21)
-    assert not students_to_correct
-
-
-@patch('dsl_grade_db.dsl_student_id_database.MongoDBStudentId')
-def test_get_students(mock_id, mongo_db_student_grade, ):
-    def side_effect_func(value):
-        if value == object_ids[0]:
-            return student_ids[0]
-        elif value == object_ids[1]:
-            return student_ids[1]
-        elif value == object_ids[2]:
-            return student_ids[2]
-
-    student_ids = ["111", "222", "333"]
-    object_ids = [ObjectId("626bccb9697a12204fb22221"),
-                  ObjectId("626bccb9697a12204fb22222"),
-                  ObjectId("626bccb9697a12204fb22223")]
-
-    mock_id.get_student_id_from.side_effect = side_effect_func
-    mock_id.get_project_id.return_value = 1
-    mongo_db_student_grade.db_id = mock_id
-    # the first student does not participate in the projectID 1
-    # and the written exam is too low
-    mongo_db_student_grade.collection.insert_one(
-        {"student_id": student_ids[0],
-         "db_id": object_ids[0],
-         "written_grades": [{"date": "08/09/2023", "grade": 4}],
-         "project_grades": [{"project_id": 0,
-                             "leaderboard_grade": 5,
-                             "final_grade": 5}]
-         })
-    # the second student has a written exam high,
-    # but the report has already been assigned
-    mongo_db_student_grade.collection.insert_one(
-        {"student_id": student_ids[1],
-         "db_id": object_ids[1],
-         "written_grades": [{"date": "08/09/2023", "grade": 20}],
-         "project_grades": [{"project_id": 1,
-                             "leaderboard_grade": 5,
-                             "report_grade": 5,
-                             "final_grade": 10}]
-         })
-    # the third student has a written exam high, and it participates in the projectID 1
-    mongo_db_student_grade.collection.insert_one(
-        {"student_id": student_ids[2],
-         "db_id": object_ids[2],
-         "written_grades": [{"date": "08/09/2023", "grade": 20}],
-         "project_grades": [{"project_id": 1,
-                             "leaderboard_grade": 0,
-                             "final_grade": 0}]
-         })
-
-    students = mongo_db_student_grade.get_students_project_session()
+    mongo_db_student_grade.insert_student(document)  # insert once
+    mongo_db_student_grade.insert_student(document)  # insert once
+    students = list(mongo_db_student_grade.collection.find({"db_id": side_effect_func(student_id)}))
     assert len(students) == 1
-    # only the second returned because it has both leaderboard and report grade
-    # for the current project id = 1
-    assert students[0]["student_id"] == student_ids[1]
+
+
+def test_remove_student(mongo_db_student_grade):
+    student_id = "123"
+    document = {"db_id": side_effect_func(student_id),
+                "name": "John Doe",
+                "written_grades": [{"grade": 90}],
+                "project_grades": []}
+
+    mongo_db_student_grade.collection.insert_one(document)
+    retrieved_student = mongo_db_student_grade.get_student(student_id)
+
+    assert retrieved_student is not None
+    assert retrieved_student["name"] == "John Doe"
+    assert retrieved_student["written_grades"][0]["grade"] == 90
+
+
+# @pytest.mark.parametrize("written_grades, expected", [()])
+# def test_get_last_written_grade_given(written_grades, expected):
+#     output = MongoDBStudentGrade._get_last_OK_written_grade_given(written_grades)
+#     assert output == expected
+
+
+@pytest.mark.parametrize("written_grades, project_grades, expected", [
+    (
+            # simple case, written and project current session OK
+            [{'date': '29/01/2024', "grade": 20, "flag_written_exam": "OK"}],
+            [{'project_id': 'First', "flag_project_exam": "OK", "leaderboard_grade": 2, "report_grade": 7,
+              "report_extra_grade": 1}],
+            30
+    ),
+    (  # simple case, written and project current session OK, but total grade less than 18
+            [{'date': '29/01/2024', "grade": 5, "flag_written_exam": "OK"}],
+            [{'project_id': 'First', "flag_project_exam": "OK",
+              "leaderboard_grade": 2, "report_grade": 7, "report_extra_grade": 1}],
+            'RESPINTO'
+    ),
+    (  # Case only written grade in current session
+            [{'date': '29/01/2024', "grade": 5, "flag_written_exam": "OK"}],
+            [],
+            ''  # TODO: we do not now yet
+    ),
+    (
+            # Case only project grade in current session
+            [],
+            [{'project_id': 'First', "flag_project_exam": "OK",
+              "leaderboard_grade": 2, "report_grade": 7, "report_extra_grade": 1}],
+            'ABSENT'
+    ),
+    (  # failed written exam (less than THRESHOLD)
+            [{'date': '29/01/2024', "grade": 5, "flag_written_exam": "failed"}],
+            [{'project_id': 'First', "flag_project_exam": "OK",
+              "leaderboard_grade": 2, "report_grade": 7, "report_extra_grade": 1}],
+            'RESPINTO'
+    ),
+    (  # Absent written exam
+            [{'date': '29/01/2024', "grade": None, "flag_written_exam": "absent"}],
+            [{'project_id': 'First', "flag_project_exam": "OK",
+              "leaderboard_grade": 2, "report_grade": 7, "report_extra_grade": 1}],
+            'ABSENT'
+    ),
+    (  # retired during the exam
+            [{'date': '29/01/2024', "grade": None, "flag_written_exam": "retired"}],
+            [{'project_id': 'First', "flag_project_exam": "OK",
+              "leaderboard_grade": 2, "report_grade": 7, "report_extra_grade": 1}],
+            'RESPINTO'
+    ),
+    (  # retired during the exam
+            [],
+            [],
+            'ABSENT'
+    ),
+    (       # the previous project has not been corrected yet
+            [{'date': '29/01/2024', "grade": 20, "flag_written_exam": "OK"}],
+            [{'project_id': 'different', "flag_project_exam": "NO-REPORT",
+              "leaderboard_grade": 2}],
+            ''  # TODO: not yet clear
+    ),
+])
+def test_get_students_to_verbalize_at_least_one_current_session(written_grades, project_grades, expected):
+    student = {
+        "db_id": '111',
+        "name": "John Doe",
+        "written_grades": written_grades,
+        "project_grades": project_grades
+    }
+    with patch('dsl_grade_db.mongo_db_student_grade.MongoDBStudentId') as mock_student_id:
+        mock_student_id.get_project_id.return_value = 'First'
+        mock_student_id.get_written_id.return_value = '29/01/2024'
+        db = MongoDBStudentGrade(database_name="DSL_grade_test")
+        db.db_id = mock_student_id
+
+        assert expected == db._get_students_to_verbalize(student)
+
+
+@pytest.mark.parametrize("written_grades, project_grades, expected", [
+    (
+            # written different session but everything is ok
+            [{'date': '29/01/2024', "grade": 20, "flag_written_exam": "OK"}],
+            [{'project_id': 'Second', "flag_project_exam": "OK", "leaderboard_grade": 2, "report_grade": 7,
+              "report_extra_grade": 1}],
+            30
+    ),
+    (
+            # written different session but less than 18
+            [{'date': '29/01/2024', "grade": 5, "flag_written_exam": "OK"}],
+            [{'project_id': 'Second', "flag_project_exam": "OK", "leaderboard_grade": 2, "report_grade": 7,
+              "report_extra_grade": 1}],
+            'RESPINTO'
+    ),
+    (
+            # written different session but previous session absent
+            [{'date': '29/01/2024', "grade": 20, "flag_written_exam": "absent"}],
+            [{'project_id': 'Second', "flag_project_exam": "OK", "leaderboard_grade": 2, "report_grade": 7,
+              "report_extra_grade": 1}],
+            'ABSENT'
+    ),
+    (
+            # project different session
+            [{'date': '10/02/2024', "grade": 20, "flag_written_exam": "OK"}],
+            [{'project_id': 'First', "flag_project_exam": "OK", "leaderboard_grade": 2, "report_grade": 7,
+              "report_extra_grade": 1}],
+            30
+    ),
+    (
+            # project different session but previous project rejected
+            [{'date': '10/02/2024', "grade": 20, "flag_written_exam": "OK"}],
+            [{'project_id': 'First', "flag_project_exam": "rejected", "leaderboard_grade": 2, "report_grade": 7,
+              "report_extra_grade": 1}],
+            ''  # TODO: not yet clear
+    ),
+])
+def test_get_students_to_verbalize_at_most_one_current_session(written_grades, project_grades, expected):
+    student = {
+        "db_id": '111',
+        "name": "John Doe",
+        "written_grades": written_grades,
+        "project_grades": project_grades
+    }
+    with patch('dsl_grade_db.mongo_db_student_grade.MongoDBStudentId') as mock_student_id:
+        mock_student_id.get_project_id.return_value = 'Second'
+        mock_student_id.get_written_id.return_value = '10/02/2024'
+        db = MongoDBStudentGrade(database_name="DSL_grade_test")
+        db.db_id = mock_student_id
+
+        assert expected == db._get_students_to_verbalize(student)

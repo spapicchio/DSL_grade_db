@@ -72,15 +72,15 @@ def report_df(tmp_path):
         {"Matricola": "123",
          "Final score": 8,
          "Note": "MFCC/ZCR/RMS + PCA + SVM/RF/KNN",
-         "extra_score": 0},
+         "report_extra_grade": 0},
         {"Matricola": "122",
          "Final score": 4,
          "Note": "MFCC/ZCR/RMS + PCA + SVM/RF/KNN",
-         "extra_score": 0},
+         "report_extra_grade": 0},
         {"Matricola": "121",
          "Final score": 3,
          "Note": "MFCC/ZCR/RMS + PCA + SVM/RF/KNN",
-         "extra_score": 1},
+         "report_extra_grade": 1},
     ]
     df = pd.DataFrame(data_input)
     df.to_csv(os.path.join(tmp_path, "report.csv"), index=False)

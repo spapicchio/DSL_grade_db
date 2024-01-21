@@ -32,7 +32,7 @@ class MongoDBReportGrade:
                 'index': len(project_grades),
                 'flag_project_exam': 'NO_LEADERBOARD',
                 'report_grade': float(student_report['Final score']),
-                'report_extra_grade': float(student_report['extra_score']),
+                'report_extra_grade': float(student_report['report_extra_grade']),
                 'report_info': student_report.to_dict(),
             }
 

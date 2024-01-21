@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+import logging
 
 from bson import ObjectId
 from pymongo import MongoClient
@@ -37,13 +37,20 @@ class MongoDBStudentGrade:
         if not self.collection.find_one({"db_id": document["db_id"]}):
             self.collection.insert_one(document)
 
+    def get_student(self, student_id: str) -> dict:
+        """Get a student from the database"""
+        db_id = self._get_db_id_from(student_id)
+        student = self.collection.find_one({"db_id": db_id})
+        if not student:
+            raise ValueError("Student ID not found in the database.")
+        return student
+
     def remove_student(self, student_id: str):
         """Delete a student from the database"""
         db_id = self._get_db_id_from(student_id)
         # remove the student from the student database
         self.collection.delete_one({"db_id": db_id})
         # remove the student_id from the student ID database
-
         self.db_id.remove_student_id(student_id)
 
     def update_student_id(self, student_id: str, new_student_id: str):
@@ -53,103 +60,209 @@ class MongoDBStudentGrade:
         self.collection.update_one({"db_id": db_id},
                                    {"$set": {"student_id": new_student_id}})
 
-    def update_students_have_rejected(self, student_ids: list[str]):
-        """Update the students that have rejected the project"""
-        for student_id in student_ids:
-            db_id = self._get_db_id_from(student_id)
-            student = self.collection.find_one({"db_id": db_id})
-            # get and sort project_grades
-            project_grades = student['project_grades']
-            project_grades.sort(
-                key=lambda x: datetime.strptime(x['project_id'], '%d/%m/%Y'))
-            # get and sort written_grades
-            written_grades = student['written_grades']
-            written_grades.sort(key=lambda x: datetime.strptime(x['date'], '%d/%m/%Y'))
-            # update student
-            self.update_student_written_grade(student_id, written_grades[:-1])
-            self.update_student_project_grade(student_id, project_grades[:-1])
-
-    def get_student(self, student_id: str) -> dict:
-        """Get a student from the database"""
-        db_id = self._get_db_id_from(student_id)
-        student = self.collection.find_one({"db_id": db_id})
-        if not student:
-            raise ValueError("Student ID not found in the database.")
-        return student
-
     def get_final_grade_given(self, student_id):
         """Get the final grade of a student"""
-        db_id = self._get_db_id_from(student_id)
-        student = self.collection.find_one({"db_id": db_id})
-        written = self._get_max_written_grade(student['written_grades'])
-        project = self._get_max_project_grade(student['project_grades'])
-        return written + project if written and project else None
+        student = self.get_student(student_id)
+        last_written = self._get_last_OK_written_grade_given(student)
+        last_project = self._get_last_OK_project_grade_given(student)
+        if last_project and last_written:
+            return last_written['grade'] + \
+                last_project['leaderboard_grade'] + last_project['report_grade'] + last_project['report_extra_grade']
 
-    def _get_max_written_grade(self, written_grades) -> float | None:
-        """Get the max written grade of a student"""
-        # TODO: this is not the max written grade, but the last one for this version
-        # order based on date, ascending
-        written_grades.sort(key=lambda x: datetime.strptime(x['date'], '%d/%m/%Y'))
-        return written_grades[-1]["grade"] if written_grades else None
+    @staticmethod
+    def _get_last_OK_written_grade_given(student: dict) -> list | None:
+        """"""
+        # if there is at least one written grade
+        written_grades = student['written_grades']
+        for exam in written_grades[::-1]:
+            if exam['flag_written_exam'] == 'OK':
+                return exam
+        return None
 
-    def _get_max_project_grade(self, project_grades) -> float | None:
-        """Get the max report grade of a student"""
+    @staticmethod
+    def _get_last_OK_project_grade_given(student: list) -> list | None:
         # select only the projects where there is the report and the leaderboard grade
-        # project_grades = [project for project in project_grades
-        #                   if 'report_grade' in project and 'leaderboard_grade' in project]
-        # # sort the projects based on project_id (date)
-        # project_grades.sort(key=lambda x: x['project_id'])
-        # return project_grades[-1]["final_grade"] if project_grades else None
-        grades = [project['final_grade'] for project in project_grades
-                  if 'report_grade' in project and 'leaderboard_grade' in project]
-        return max(grades) if grades else None
+        project_grades = student['project_grades']
+        # for loop from the last element
+        for project in project_grades[::-1]:
+            if 'report_grade' in project and 'leaderboard_grade' in project \
+                    and project['flag_project_exam'] == 'OK':
+                return project
+        return None
 
-    def get_student_id_to_correct(self, threshold: float):
-        """Get the student ID of the students that have to correct their report"""
-        project_id = self.db_id.get_project_id()
-        # There is at least one project with the current projectID
-        # and the report grade not yet assigned
-        # TODO: if No submission to leaderboard, we should not consider it
-        # TODO: consume_documents_in_teams() in teams_grade.py
-        students = self.collection.find({
-            "project_grades": {
-                "$elemMatch": {
-                    "project_id": project_id,
-                    "report_grade": {"$exists": False},
-                }}
-        })
-        # now we have all the students that participate in the projectID
-        # select only those with a max_written_grade >= Threshold
-        students_ids = [self.db_id.get_student_id_from(student["db_id"])
-                        for student in students
-                        if self._get_max_written_grade(
-                student['written_grades']) >= threshold]
-        return students_ids
+    def _get_written_grade_current_appeal(self, student: dict) -> dict | None:
+        """Get the written grade of the current appeal"""
 
-    def get_students_project_session(self) -> list[dict]:
-        """Get the final students"""
-        # Return the students that have completed the current session project
+        if not student['written_grades']:
+            return None
+
+        if student['written_grades'][-1]['date'] == self.db_id.get_written_id():
+            return student['written_grades'][-1]
+        return None
+
+    def _get_project_grade_current_appeal(self, student: dict) -> dict | None:
+        """Get the project grade of the current appeal"""
+        if not student['project_grades']:
+            return None
+        if student['project_grades'][-1]['project_id'] == self.db_id.get_project_id():
+            return student['project_grades'][-1]
+        return None
+
+    def get_student_id_to_correct_report(self):
+        """Get the student ID of the students that have to correct their report from the current exam session"""
         project_id = self.db_id.get_project_id()
+        written_id = self.db_id.get_written_id()
+        # all the students that have participated in the current exam session
         students = self.collection.find({
-            "project_grades": {
-                "$elemMatch": {
-                    "project_id": project_id,
-                    "report_grade": {"$exists": True},
-                    "leaderboard_grade": {"$exists": True}
-                }}
+            "$or": [
+                {  # case both written and project are in the current exam session
+                    "has_been_verbalized": False,
+                    "written_grades": {"$elemMatch": {"date": written_id, "flag_written_exam": "OK"}},
+                    "project_grades": {
+                        "$elemMatch": {"project_id": project_id, "flag_project_exam": "OK",
+                                       "report_grade": {"$exists": False}}}
+                },
+                {  # case only project is in the current exam session
+                    "has_been_verbalized": False,
+                    "written_grades": {"$elemMatch": {"date": {'$ne': written_id}, "flag_written_exam": "OK"}},
+                    "project_grades": {
+                        "$elemMatch": {"project_id": project_id, "flag_project_exam": "OK",
+                                       "report_grade": {"$exists": False}}}
+                },
+                {  # case only written is in the current exam session
+                    "has_been_verbalized": False,
+                    "written_grades": {
+                        "$elemMatch": {"date": written_id, "flag_written_exam": "OK"}},
+                    "project_grades": {
+                        "$elemMatch": {"project_id": {'$ne': project_id}, "flag_project_exam": "OK",
+                                       "report_grade": {"$exists": False}}}
+                }
+            ]
         })
-        return list(students)
+        return [self.db_id.get_student_id_from(student['db_id']) for student in students]
+
+    def get_all_students_current_appeal(self):
+        """Get the student ID of the students that have to correct their report from the current exam session"""
+        project_id = self.db_id.get_project_id()
+        written_id = self.db_id.get_written_id()
+        # all the students that have participated in the current exam session
+        students = self.collection.find({
+            "$or": [
+                {  # case both written and project are in the current exam session
+                    "written_grades.date": written_id,
+                    "project_grades.project_id": project_id
+                },
+                {  # case both written and project are in the current exam session
+                    "written_grades.date": {'$ne': written_id},
+                    "project_grades.project_id": project_id
+                },
+                {  # case both written and project are in the current exam session
+                    "written_grades.date": written_id,
+                    "project_grades.project_id": {'$ne': project_id}
+                },
+            ]
+        })
+
+    def _update_student_has_rejected_written(self, student_id):
+        """Update the student who has rejected the written exam"""
+        student = self.get_student(student_id)
+        written_grades = student['written_grades']
+        last_exam = self._get_last_OK_written_grade_given(written_grades)
+        if last_exam['date'] != self.db_id.get_written_id():
+            # if the last written exam is not the current one
+            logging.warning(f'This student id {student_id}, does not have the current written session')
+            logging.warning(f'\t{student["written_grades"]}')
+
+        index = last_exam['index']
+        written_grades[index]['flag_written_exam'] = 'REJECTED'
+        self.update_student_project_grade(student_id, written_grades)
+
+    def _update_student_has_rejected_project(self, student_id: str):
+        """Update the students that have rejected the project"""
+        student = self.get_student(student_id)
+        project_grades = student['project_grades']
+        last_project = self._get_last_OK_project_grade_given(project_grades)
+        if last_project['project_id'] != self.db_id.get_project_id():
+            # if the last project is not the current one
+            logging.warning(f'This student id {student_id}, does not have the current project session')
+            logging.warning(f'\t{student["project_grades"]}')
+        # if the last written exam is the current one
+        index = last_project['index']
+        project_grades[index]['flag_project_exam'] = 'REJECTED'
+        self.update_student_project_grade(student_id, project_grades)
+
+    def update_student_has_rejected_project_and_written(self, students_id: str):
+        self._update_student_has_rejected_written(students_id)
+        self._update_student_has_rejected_project(students_id)
+
+    def _get_students_to_verbalize(self, student: dict) -> list[dict]:
+        current_project_appeal = self._get_project_grade_current_appeal(student)
+        current_written_appeal = self._get_written_grade_current_appeal(student)
+        if not current_written_appeal:
+            # if there is no current written exam, take the last available ok exam only if it is OK
+            current_written_appeal = self._get_last_OK_written_grade_given(student)
+        if not current_project_appeal:
+            # if there is no current project exam, take the last available ok exam only if it is OK
+            current_project_appeal = self._get_last_OK_project_grade_given(student)
+
+        if not current_project_appeal and not current_written_appeal:
+            # case 7: the student has not taken the written exam or the project
+            return 'ABSENT'
+
+        if current_project_appeal and not current_written_appeal:
+            # case 6: the student has taken only the project in this appeal
+            return 'ABSENT'
+
+        if not current_project_appeal and current_written_appeal:
+            # case 5: the student has taken only the written exam in this appeal
+            # TODO check what happen in this case
+            return ''
+
+        # case where there is at least one written exam and one project exam
+        if current_written_appeal['flag_written_exam'] == 'absent':
+            # the student was absent at the written exam
+            return 'ABSENT'
+        if current_written_appeal['flag_written_exam'] == 'failed' or current_written_appeal[
+            'flag_written_exam'] == 'retired':
+            # the written exam was failed or retired
+            return 'RESPINTO'
+
+        # at ths point all the written exams and project should be ok
+        final_grade = current_written_appeal['grade'] + \
+                      current_project_appeal['leaderboard_grade'] + current_project_appeal['report_grade'] + \
+                      current_project_appeal['report_extra_grade']
+
+        return final_grade if final_grade >= 18 else 'RESPINTO'
+
+    def analize_students_current_appeal(self, students_id_appeal: list[str],
+                                        students_id_rejected_written: set,
+                                        students_id_rejected_written_and_project: set
+                                        ) -> dict[str, str | float]:
+        """Analize the students of the current appeal"""
+        verbalized_students = {}
+        for student_id in students_id_appeal:
+            # Case 1: the student has rejected the written exam or both the written exam and the project
+            if student_id in students_id_rejected_written_and_project or student_id in students_id_rejected_written:
+                verbalized_students[student_id] = 'RESPINTO'
+            student = self.get_student(student_id)
+            verbalized_students[student_id] = self._get_students_to_verbalize(student)
+        return verbalized_students
+
+    def _update_student_has_been_verbalized(self, student_id: str):
+        db_id = self._get_db_id_from(student_id)
+        self.collection.update_one({"db_id": db_id},
+                                   {"$set": {"has_been_verbalized": True}})
 
     def update_student_project_grade(self, student_id: str, project_grades: list):
         """Update the project grade of a student"""
-        db_id = self.db_id.get_db_id_from(student_id)
-        self.collection.update_one({"db_id": db_id},
+        student = self.get_student(student_id)
+        self.collection.update_one({"db_id": student['db_id']},
                                    {"$set": {"project_grades": project_grades}})
 
     def update_student_written_grade(self, student_id: str, written_grades: list):
         """Update the written grade of a student"""
-        db_id = self.db_id.get_db_id_from(student_id)
-        self.collection.update_one({"db_id": db_id},
+        student = self.get_student(student_id)
+        self.collection.update_one({"db_id": student['db_id']},
                                    {"$set": {"written_grades": written_grades}})
 
     def close(self):
