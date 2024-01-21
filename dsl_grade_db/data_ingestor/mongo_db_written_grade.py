@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import locale
-import math
 from datetime import datetime
 
 import pandas as pd
@@ -23,10 +22,10 @@ class MongoDBWrittenGrade:
         self.registered_student_csv_file_path = registered_student_csv_file_path
         self.date = None
 
-    def set_project_date(self, written_df):
+    def set_written_id(self, written_df):
         date = written_df['date'][0]
-        # the date now is present in the database id and can be used by the report and the leaderboard
-        self.student_coll.db_id.set_project_id(date)
+        # written id of the current exam session
+        self.student_coll.db_id.set_written_id(date)
         return date
 
     @staticmethod
@@ -64,40 +63,57 @@ class MongoDBWrittenGrade:
             student_exam_ = written_df.loc[student_id_].to_dict() if student_id_ in present_student_in_class else None
             # update the written grades of the student
             written_grades = self._update_written_grade(written_doc_to_add=student_exam_,
-                                                        written_grades=student_['written_grades'])
+                                                        written_grades=student_['written_grades'], th=0)
             # update the database only if there is an update
             if written_grades:
                 self.student_coll.update_student_written_grade(student_id_, written_grades)
 
         written_df = self._read_written_grade(self.written_grade_csv_file_path)
-        self.date = self.set_project_date(written_df)
+        self.date = self.set_written_id(written_df)
         registered_df = self._read_registered_student(self.registered_student_csv_file_path)
 
         present_student_in_class = written_df.index
         registered_df.apply(lambda row: _update_students(row['student_id']), axis=1)
 
-    def _update_written_grade(self, written_doc_to_add: dict | None, written_grades: list[dict]) -> list[dict] | None:
+    def _update_written_grade(self, written_doc_to_add: dict | None,
+                              written_grades: list,
+                              th: float = 18.0
+                              ) -> list[dict] | None:
 
-        set_flag = lambda x: 'OK' if x['Valutazione/20,00'] else 'retired'
+        # if the grade is not empty, it is OK only if greater than Threshold otherwise failed
+        set_flag_enough = lambda x: 'OK' if grade >= th else 'failed'
+        # if there is written_doc_to_add the student has taken the written exam but if grade is empty retired
+        set_flag_retired_or_not = lambda x: set_flag_enough(x) if grade else 'retired'
+        # if there is no written_doc_to_add the student was absent
+        set_flag_absent = lambda x: set_flag_retired_or_not(x) if x else 'absent'
+
+        set_grade = lambda x: float(x) if x else None
 
         def create_grade_dict():
             return {
                 'date': self.date,
-                'grade': float(grade) if grade else None,
-                "flag_written_exam": set_flag(written_doc_to_add) if written_doc_to_add else 'absent',
+                'index': len(written_grades),
+                'grade': set_grade(grade),
+                "flag_written_exam": set_flag_absent(written_doc_to_add),
                 'written_info': written_doc_to_add
             }
 
-        grade = written_doc_to_add['Valutazione/20,00'] if written_doc_to_add else None
+        grade = float(written_doc_to_add['Valutazione/20,00']) \
+            if written_doc_to_add and written_doc_to_add['Valutazione/20,00'] else None
+
         # if the student has not yet taken the written exam
         if written_grades and written_grades[-1]['date'] == self.date:
             if written_grades[-1]['grade'] != grade:
                 # if there is at least one grade and this grade is the current exam
                 # but the grade has changed then you pop
-                written_grades.pop()
+                last_written_grades = written_grades.pop()
+                last_written_grades['grade'] = set_grade(grade)
+                last_written_grades['flag_written_exam'] = set_flag_absent(written_doc_to_add)
+                last_written_grades['written_info'] = written_doc_to_add
             else:
                 return None
-
+        else:
+            last_written_grades = create_grade_dict()
         # if the student has taken the written exam
-        written_grades.append(create_grade_dict())
+        written_grades.append(last_written_grades)
         return written_grades

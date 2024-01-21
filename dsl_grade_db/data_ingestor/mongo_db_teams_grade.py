@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pandas as pd
 from pymongo import MongoClient
 
@@ -21,14 +23,18 @@ class MongoDBTeamsGrade:
         self.leaderboard_csv_file_path = leaderboard_csv_file_path
         self.teams_csv_file_path = teams_csv_file_path
 
+    def set_project_id(self, project_id: str):
+        self.student_coll.db_id.set_project_id(project_id)
+
     @property
     def date(self):
         return self.student_coll.db_id.get_project_id()
 
     def _parse_df(self, df) -> pd.DataFrame:
         if 'Timestamp' in df:  # true only for teams.csv
-            # ths is the date of the CURRENT exam session
-            df['project_id'] = self.date
+            # this is the date of the CURRENT exam session
+            date = df['project_id']
+            self.set_project_id(date)
             df['max_lead_grade'] = -1  # set it to -1 in case of no update
         return df
 
@@ -86,18 +92,18 @@ class MongoDBTeamsGrade:
             if student_id_:  # update only if it exists
                 student_ = self.student_coll.get_student(student_id_)
                 project_grades_ = self._update_project_grade(team=team_, project_grades=student_['project_grades'])
-                if project_grades_:
-                    self.student_coll.update_student_project_grade(student_id_, project_grades_)
+                self.student_coll.update_student_project_grade(student_id_, project_grades_)
 
         df_teams = self.consume_documents_in_leaderboard()
         df_teams.apply(lambda team: update_team(team.to_dict()), axis=1)
 
     @staticmethod
-    def _update_project_grade(team, project_grades: list):
+    def _update_project_grade(team, project_grades: list) -> list[dict]:
         def create_project_dict():
             return {
                 'project_id': team['project_id'],
-                'flag_project_exam': 'OK',
+                'index': len(project_grades),
+                'flag_project_exam': 'NO_REPORT',
                 'leaderboard_grade': float(team['max_lead_grade']),
                 'team_info': team
             }
@@ -107,6 +113,8 @@ class MongoDBTeamsGrade:
         if project_grades and team['project_id'] == project_grades[-1]['project_id']:
             project = project_grades.pop()
             project['leaderboard_grade'] = lead_grad
+            if 'report_info' in project:
+                project['flag_project_exam'] = 'OK'
             project['team_info'] = team
         else:
             project = create_project_dict()

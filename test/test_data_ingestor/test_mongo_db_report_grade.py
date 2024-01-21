@@ -41,7 +41,7 @@ def mongo_db_student_grade():
                 "surname": "Doe",
                 "written_grades": [],  # no written grades
                 "project_grades": [
-                    {'project_id': "1/3/2023", 'leaderboard_grade': 3,
+                    {'project_id': "1/3/2023", 'index': 0, 'leaderboard_grade': 3,
                      'final_grade': 3, 'team_info': {}}
                 ],
             },
@@ -52,7 +52,7 @@ def mongo_db_student_grade():
                 "surname": "Doe",
                 "written_grades": [],  # no written grades
                 "project_grades": [
-                    {'project_id': "1/3/2021", 'report_grade': 10,
+                    {'project_id': "1/3/2021", 'index': 0, 'report_grade': 10,
                      'leaderboard_grade': 3, 'final_grade': 13,
                      'report_info': {}, 'team_info': {}}
                 ],
@@ -104,10 +104,12 @@ def test_student_no_project(mongo_db_report):
     #         "written_grades": [],  # no written grades
     #         "project_grades": [],  # no project grades
     #     }
+
     mongo_db_report.consume_reports()
     student = mongo_db_report.student_coll.get_student("123")
     assert len(student['project_grades']) == 1
     assert student['project_grades'][0]['report_grade'] == 8
+    assert student['project_grades'][0]['index'] == 0
 
 
 def test_student_only_lead(mongo_db_report):
@@ -128,7 +130,7 @@ def test_student_only_lead(mongo_db_report):
     student = mongo_db_report.student_coll.get_student("122")
     assert len(student['project_grades']) == 1
     assert student['project_grades'][0]['report_grade'] == 4
-
+    assert student['project_grades'][0]['index'] == 0
 
 
 def test_student_one_complete_project(mongo_db_report):
@@ -149,3 +151,4 @@ def test_student_one_complete_project(mongo_db_report):
     student = mongo_db_report.student_coll.get_student("121")
     assert len(student['project_grades']) == 2
     assert student['project_grades'][-1]['report_grade'] == 3
+    assert student['project_grades'][-1]['index'] == 1

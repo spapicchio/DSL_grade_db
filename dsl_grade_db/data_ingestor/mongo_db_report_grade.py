@@ -25,27 +25,33 @@ class MongoDBReportGrade:
         df = self._read_report_df(pd.read_csv(self.report_csv_file_path))
         df.apply(self._update_project_grade, axis=1)
 
-    def _get_student_project_grade(self, student_id):
-        student = self.student_coll.get_student(student_id)
-        return student['project_grades']
-
     def _update_project_grade(self, student_report):
         def create_project_dict():
             return {
                 'project_id': self.date,
-                'flag_project_exam': 'OK',
+                'index': len(project_grades),
+                'flag_project_exam': 'NO_LEADERBOARD',
                 'report_grade': float(student_report['Final score']),
                 'report_extra_grade': float(student_report['extra_score']),
                 'report_info': student_report.to_dict(),
             }
 
-        student_id = student_report['Matricola']
-        project_grades = self._get_student_project_grade(student_id)
         report_grade = float(student_report['Final score'])
+        report_extra_grade = float(student_report['report_extra_grade'])
+
+        student_id = student_report['Matricola']
+
+        student = self.student_coll.get_student(student_id)
+        project_grades = student['project_grades']
 
         if project_grades and self.date == project_grades[-1]['project_id']:
+            # this means this project already exists.
             project = project_grades.pop()
             project['report_grade'] = report_grade
+            project['report_extra_grade'] = report_extra_grade
+            # you need to change only if there is the leaderboard
+            if 'team_info' in project:
+                project['flag_project_exam'] = 'OK'
             project['report_info'] = student_report.to_dict()
         else:
             project = create_project_dict()

@@ -46,6 +46,7 @@ def mongo_db_student_grade():
                     "written_grades": [],
                     "project_grades": [
                         {'project_id': "1/3/2023",
+                         'index': 0,
                          'report_grade': 5,
                          'project_grade': 5,
                          'report_info': {}},
@@ -58,7 +59,7 @@ def mongo_db_student_grade():
                     "surname": "Power",
                     "written_grades": [],  # no written grades
                     "project_grades": [
-                        {'project_id': "1/3/2021", 'report_grade': 10,
+                        {'project_id': "1/3/2021", 'index': 0, 'report_grade': 10,
                          'leaderboard_grade': 3, 'project_grade': 13,
                          'report_info': {}, 'team_info': {}}],
                 }
@@ -90,7 +91,8 @@ def teams_df(tmp_path):
     data_input = [
         {"Timestamp": "1/3/2023 22:17:06",
          "Student ID # 1": 123,
-         "Student ID # 2": 122}
+         "Student ID # 2": 122,
+         'project_id': '1/3/2023'}
     ]
     df = pd.DataFrame(data_input)
     df.to_csv(os.path.join(tmp_path, "teams.csv"), index=False)
@@ -128,15 +130,19 @@ def test_consume_documents_in_teams(leaderboard_df, teams_df,
     db.consume_documents_in_teams()
     # the first student has only one project with the leaderboard
     student_1 = mongo_db_student_grade.get_student("123")
+
+    assert student_1['project_grades'][-1]['index'] == 0
     assert student_1["project_grades"][-1]["leaderboard_grade"] == 5
     assert student_1["project_grades"][-1]['project_id'] == '1/3/2023'
     # the second student has one project with report only
     # assert if it is updated
     student_2 = mongo_db_student_grade.get_student("122")
     assert len(student_2["project_grades"]) == 1
+    assert student_2['project_grades'][-1]['index'] == 0
     assert student_2["project_grades"][-1]['leaderboard_grade'] == 5
     # the third student has already a complete project, append the new one
     student_3 = mongo_db_student_grade.get_student("121")
+    assert student_3['project_grades'][-1]['index'] == 1
     assert len(student_3["project_grades"]) == 2
     assert student_3["project_grades"][-1]['leaderboard_grade'] == 6
 
@@ -145,23 +151,23 @@ def test_consume_documents_in_teams(leaderboard_df, teams_df,
     (
             {'project_id': "1/3/2023", 'max_lead_grade': 10},
             [],  # project_grades
-            [{'project_id': "1/3/2023",
-              'flag_project_exam': 'OK',
+            [{'project_id': "1/3/2023", 'index': 0,
+              'flag_project_exam': 'NO_REPORT',
               'leaderboard_grade': 10, 'team_info': {'project_id': "1/3/2023", 'max_lead_grade': 10}}]
 
     ),
     (
             {'project_id': "1/3/2023", 'max_lead_grade': 10},
-            [{'project_id': "1/3/2022",
-              'flag_project_exam': 'OK',
+            [{'project_id': "1/3/2022", 'index': 0,
+              'flag_project_exam': 'NO_REPORT',
               'leaderboard_grade': 10, 'team_info': {'project_id': "1/3/2023", 'max_lead_grade': 10}}],
             # project_grades
             [
-                {'project_id': "1/3/2022",
-                 'flag_project_exam': 'OK',
+                {'project_id': "1/3/2022", 'index': 0,
+                 'flag_project_exam': 'NO_REPORT',
                  'leaderboard_grade': 10, 'team_info': {'project_id': "1/3/2023", 'max_lead_grade': 10}},
-                {'project_id': "1/3/2023",
-                 'flag_project_exam': 'OK',
+                {'project_id': "1/3/2023", 'index': 1,
+                 'flag_project_exam': 'NO_REPORT',
                  'leaderboard_grade': 10, 'team_info': {'project_id': "1/3/2023", 'max_lead_grade': 10}}
             ]
 
@@ -170,13 +176,15 @@ def test_consume_documents_in_teams(leaderboard_df, teams_df,
 def test_update_project_grade(team, project_grades, result):
     assert MongoDBTeamsGrade._update_project_grade(team, project_grades) == result
 
+
 @pytest.mark.parametrize("team, project_grades, result", [
     (
             {'project_id': "1/3/2023", 'max_lead_grade': 5},
-            [{'project_id': "1/3/2023",
+            [{'project_id': "1/3/2023", 'index': 0,
               'flag_project_exam': 'OK',
-              'leaderboard_grade': 10, 'team_info': {'project_id': "1/3/2023", 'max_lead_grade': 10}}],  # project_grades
-            [{'project_id': "1/3/2023",
+              'leaderboard_grade': 10, 'team_info': {'project_id': "1/3/2023", 'max_lead_grade': 10}}],
+            # project_grades
+            [{'project_id': "1/3/2023", 'index': 0,
               'flag_project_exam': 'OK',
               'leaderboard_grade': 5, 'team_info': {'project_id': "1/3/2023", 'max_lead_grade': 5}}]
 
@@ -184,19 +192,19 @@ def test_update_project_grade(team, project_grades, result):
     (
             {'project_id': "1/3/2023", 'max_lead_grade': 5},
             [
-                {'project_id': "1/3/2022",
+                {'project_id': "1/3/2022", 'index': 0,
                  'flag_project_exam': 'OK',
                  'leaderboard_grade': 10, 'team_info': {'project_id': "1/3/2023", 'max_lead_grade': 10}},
-                {'project_id': "1/3/2023",
+                {'project_id': "1/3/2023", 'index': 1,
                  'flag_project_exam': 'OK',
                  'leaderboard_grade': 10, 'team_info': {'project_id': "1/3/2023", 'max_lead_grade': 10}}
             ],
             # project_grades
             [
-                {'project_id': "1/3/2022",
+                {'project_id': "1/3/2022", 'index': 0,
                  'flag_project_exam': 'OK',
                  'leaderboard_grade': 10, 'team_info': {'project_id': "1/3/2023", 'max_lead_grade': 10}},
-                {'project_id': "1/3/2023",
+                {'project_id': "1/3/2023", 'index': 1,
                  'flag_project_exam': 'OK',
                  'leaderboard_grade': 5, 'team_info': {'project_id': "1/3/2023", 'max_lead_grade': 5}}
             ]
@@ -207,11 +215,13 @@ def test_update_project_grade_same_date(team, project_grades, result):
     """update leaderboard grade because changed"""
     assert MongoDBTeamsGrade._update_project_grade(team, project_grades) == result
 
+
 @pytest.mark.parametrize("team, project_grades, result", [
     (
             {'project_id': "1/3/2023", 'max_lead_grade': 5},
-            [{'project_id': "1/3/2023", 'flag_project_exam': 'OK', 'report_grade': 10, 'report_info': {}}],  # project_grades
-            [{'project_id': "1/3/2023", 'flag_project_exam': 'OK', 'report_grade': 10, 'report_info': {},
+            [{'project_id': "1/3/2023", 'index': 0, 'flag_project_exam': 'OK', 'report_grade': 10, 'report_info': {}}],
+            # project_grades
+            [{'project_id': "1/3/2023", 'index': 0, 'flag_project_exam': 'OK', 'report_grade': 10, 'report_info': {},
               'leaderboard_grade': 5, 'team_info': {'project_id': "1/3/2023", 'max_lead_grade': 5}}]
 
     ),

@@ -46,7 +46,7 @@ class MongoDBStudentId:
         self.collection.update_one({"MATRICOLA": student_id},
                                    {"$set": {"MATRICOLA": new_student_id}})
 
-    def get_db_id_from(self, student_id: str) -> ObjectId | None:
+    def get_db_id_from(self, student_id: str | float) -> ObjectId | None:
         """
         Retrieves the ObjectID value for a given student ID.
 
@@ -90,6 +90,16 @@ class MongoDBStudentId:
 
     def get_project_id(self):
         return self.collection.find_one({"project_id": "project_id"})['id']
+
+    def set_written_id(self, written_id: str):
+        if not isinstance(written_id, str):
+            written_id = str(written_id)
+        self.collection.update_one({"written_id": "written_id"},
+                                   {'$set': {'id': written_id}},
+                                   upsert=True)
+
+    def get_written_id(self):
+        return self.collection.find_one({"written_id": "written_id"})['id']
 
     def close(self):
         """Close the database"""
