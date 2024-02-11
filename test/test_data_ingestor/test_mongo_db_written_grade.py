@@ -217,7 +217,7 @@ def test_update_written_grade_case_3(written_grades, written_doc_to_add, result)
 
 @pytest.mark.parametrize("written_grades, written_doc_to_add, result", [
     (
-            [{'date': '08/09/2023', 'index':0,  'grade': 10, "flag_written_exam": 'OK',
+            [{'date': '08/09/2023', 'index': 0, 'grade': 10, "flag_written_exam": 'OK',
               "written_info": {'date': '08/09/2023', 'Valutazione/20,00': 10}}],  # written_grades
             {'date': '08/09/2023', 'Valutazione/20,00': ""},  # written_doc_to_add
             {'date': '08/09/2023', 'index': 0, 'grade': None, "flag_written_exam": 'retired',
@@ -261,11 +261,12 @@ def test_update_written_grade_case_5(written_grades, written_doc_to_add, result)
 
 def test_consume_written_grade(mongo_db_student_grade, written_grade_df, registered_df, tmp_path):
     db = MongoDBWrittenGrade(database_name="DSL_grade_test",
-                             written_grade_csv_file_path=os.path.join(tmp_path, 'written_grade.csv'),
-                             registered_student_csv_file_path=os.path.join(tmp_path, 'registered_student.csv'))
+                             )
     db.student_coll = mongo_db_student_grade
 
-    db.consume_registered_students()
+    db.consume_registered_students(written_grade_path=os.path.join(tmp_path, 'written_grade.csv'),
+                                   registered_student_path=os.path.join(tmp_path, 'registered_student.csv'),
+                                   threshold=0.0)
     # first student should contain only one exam for the date 08/09/2023
     student = mongo_db_student_grade.get_student("123")
     written_grades_student_1 = student['written_grades']
