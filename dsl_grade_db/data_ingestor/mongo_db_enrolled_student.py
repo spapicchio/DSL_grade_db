@@ -1,4 +1,5 @@
 from pymongo import MongoClient
+from tqdm import tqdm
 
 from .utils import read_file
 from ..dsl_student_id_database import MongoDBStudentId
@@ -15,6 +16,9 @@ class MongoDBEnrolledStudent:
     def consume_file(self, file_path):
         df = read_file(file_path)
         df['MATRICOLA'] = df['MATRICOLA'].astype(str)
-        for _, row in df.iterrows():
+        for _, row in tqdm(df.iterrows(), desc='Processing enrolled students'):
             self.mongo_db_student_id.add_student_id(row.to_dict())
             self.mongo_db_student_grade.insert_student(row.to_dict())
+
+    def close(self):
+        self.client.close()

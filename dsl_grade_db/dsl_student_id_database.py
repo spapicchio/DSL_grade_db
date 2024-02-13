@@ -5,7 +5,7 @@ from pymongo import MongoClient
 
 
 class MongoDBStudentId:
-    def __init__(self, database_name="DSL_grade_dbs"):
+    def __init__(self, database_name="DSL_grade"):
         self.client = MongoClient()
         self.db = self.client[database_name]
         self.collection = self.db["enrolled_students"]
@@ -89,6 +89,7 @@ class MongoDBStudentId:
                                    upsert=True)
 
     def get_project_id(self):
+        # get where project ID exists
         return self.collection.find_one({"project_id": "project_id"})['id']
 
     def set_written_id(self, written_id: str):

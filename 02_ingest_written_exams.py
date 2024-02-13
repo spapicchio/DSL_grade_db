@@ -8,6 +8,7 @@ def main():
         registered_student_path='data/02_written_grade/primo_appello/VISAP_Elenco_Studenti_11022024192517.xls',
         threshold=8.0
     )
+    db.close()
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import locale
 from datetime import datetime
 
 from pymongo import MongoClient
+from tqdm import tqdm
 
 from .utils import read_file
 from .. import MongoDBStudentGrade
@@ -41,7 +42,8 @@ class MongoDBWrittenGrade:
         # Identify students who were present in the class
         present_student_in_class = set(written_df.index)
         # Apply the update function to each registered student.
-        registered_df.apply(lambda row: _update_students(row['student_id']), axis=1)
+        tqdm.pandas(desc='Processing written grades')
+        registered_df.progress_apply(lambda row: _update_students(row['student_id']), axis=1)
 
     def set_written_id(self, written_df):
         date = written_df['date'][0]
@@ -113,3 +115,6 @@ class MongoDBWrittenGrade:
         # if the student has taken the written exam
         written_grades.append(last_written_grades)
         return written_grades
+
+    def close(self):
+        self.client.close()

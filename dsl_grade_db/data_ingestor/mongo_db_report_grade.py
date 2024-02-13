@@ -1,5 +1,6 @@
 import pandas as pd
 from pymongo import MongoClient
+from tqdm import tqdm
 
 from dsl_grade_db.mongo_db_student_grade import MongoDBStudentGrade
 
@@ -23,7 +24,8 @@ class MongoDBReportGrade:
 
     def consume_reports(self):
         df = self._read_report_df(pd.read_csv(self.report_csv_file_path))
-        df.apply(self._update_project_grade, axis=1)
+        tqdm.pandas(desc='Processing Report')
+        df.progress_apply(self._update_project_grade, axis=1)
 
     def _update_project_grade(self, student_report):
         def create_project_dict():

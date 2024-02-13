@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pandas as pd
 from pymongo import MongoClient
+from tqdm import tqdm
 
+from dsl_grade_db.data_ingestor.utils import read_file
 from dsl_grade_db.mongo_db_student_grade import MongoDBStudentGrade
 
 
@@ -14,27 +16,25 @@ class MongoDBTeamsGrade:
     a submission to the leaderboard in order to update the project grades.
     """
 
-    def __init__(self, database_name, leaderboard_csv_file_path, teams_csv_file_path):
+    def __init__(self, database_name, project_id):
 
         self.client = MongoClient()
         self.db = self.client[database_name]
-        self.student_coll = MongoDBStudentGrade(database_name=database_name)
-        # read leaderboard and add to collection
-        self.leaderboard_csv_file_path = leaderboard_csv_file_path
-        self.teams_csv_file_path = teams_csv_file_path
+        self.student_database = MongoDBStudentGrade(database_name=database_name)
+        self.project_id = project_id
+        self.set_project_id(project_id)
 
     def set_project_id(self, project_id: str):
-        self.student_coll.db_id.set_project_id(project_id)
+        self.student_database.db_id.set_project_id(project_id)
 
     @property
     def date(self):
-        return self.student_coll.db_id.get_project_id()
+        return self.student_database.db_id.get_project_id()
 
-    def _parse_df(self, df) -> pd.DataFrame:
+    def _parse_df(self, path) -> pd.DataFrame:
+        df = read_file(path)
+        df['project_id'] = self.project_id
         if 'Timestamp' in df:  # true only for teams.csv
-            # this is the date of the CURRENT exam session
-            date = df['project_id']
-            self.set_project_id(date)
             df['max_lead_grade'] = -1  # set it to -1 in case of no update
         return df
 
@@ -45,14 +45,34 @@ class MongoDBTeamsGrade:
             student_id2_team_index[row['Student ID # 2']] = index
         return student_id2_team_index
 
-    def consume_documents_in_leaderboard(self):
-        df_leaderboard = self._parse_df(pd.read_csv(self.leaderboard_csv_file_path))
-        df_teams = self._parse_df(pd.read_csv(self.teams_csv_file_path))
+    def consume_documents_in_teams(self, leaderboard_path, teams_path):
+        """update the students from teams collection"""
+
+        def update_team(team_):
+            student_id_1 = team_['Student ID # 1']
+            student_id_2 = team_['Student ID # 2']
+            update_student(student_id_1, team_)
+            update_student(student_id_2, team_)
+
+        def update_student(student_id_, team_):
+            if student_id_:  # update only if it exists
+                student_ = self.student_database.get_student(student_id_)
+                project_grades_ = self._update_project_grade(team=team_, project_grades=student_['project_grades'])
+                self.student_database.update_student_project_grade(student_id_, project_grades_)
+
+        df_teams = self._consume_documents_in_leaderboard(leaderboard_path, teams_path)
+        tqdm.pandas(desc="Processing teams")
+        df_teams.progress_apply(lambda team: update_team(team.to_dict()), axis=1)
+
+    def _consume_documents_in_leaderboard(self, leaderboard_path, teams_path):
+        df_leaderboard = self._parse_df(leaderboard_path)
+        df_teams = self._parse_df(teams_path)
         # create a hashmap where the key is the student_id and the value is the index of the team
         student_id2_team_index = self._create_student_id2_team_index(df_teams)
 
         # iterate over the leaderboard
-        for _, lead_doc in df_leaderboard.iterrows():
+
+        for _, lead_doc in tqdm(df_leaderboard.iterrows(), desc='Processing leaderboard'):
             # get the team index
             student_id = lead_doc["matricola"]
             if student_id in student_id2_team_index:
@@ -78,24 +98,6 @@ class MongoDBTeamsGrade:
             'project_id': self.date,
             'max_lead_grade': lead_doc['rounded_points']
         }])
-
-    def consume_documents_in_teams(self):
-        """update the students from teams collection"""
-
-        def update_team(team_):
-            student_id_1 = team_['Student ID # 1']
-            student_id_2 = team_['Student ID # 2']
-            update_student(student_id_1, team_)
-            update_student(student_id_2, team_)
-
-        def update_student(student_id_, team_):
-            if student_id_:  # update only if it exists
-                student_ = self.student_coll.get_student(student_id_)
-                project_grades_ = self._update_project_grade(team=team_, project_grades=student_['project_grades'])
-                self.student_coll.update_student_project_grade(student_id_, project_grades_)
-
-        df_teams = self.consume_documents_in_leaderboard()
-        df_teams.apply(lambda team: update_team(team.to_dict()), axis=1)
 
     @staticmethod
     def _update_project_grade(team, project_grades: list) -> list[dict]:

@@ -9,7 +9,7 @@ from .dsl_student_id_database import MongoDBStudentId
 
 
 class MongoDBStudentGrade:
-    def __init__(self, database_name="DSL_grade_dbs"):
+    def __init__(self, database_name="DSL_grade"):
         self.client = MongoClient()
         self.db = self.client[database_name]
         self.collection = self.db["student_grade"]
@@ -108,7 +108,7 @@ class MongoDBStudentGrade:
             return student['project_grades'][-1]
         return None
 
-    def get_student_id_to_correct_report(self):
+    def get_teams_to_correct_report(self):
         """Get the student ID of the students that have to correct their report from the current exam session"""
         project_id = self.db_id.get_project_id()
         written_id = self.db_id.get_written_id()
@@ -116,30 +116,23 @@ class MongoDBStudentGrade:
         students = self.collection.find({
             "$or": [
                 {  # case both written and project are in the current exam session
-                    "has_been_verbalized": False,
                     "written_grades": {"$elemMatch": {"date": written_id, "flag_written_exam": "OK"}},
-                    "project_grades": {
-                        "$elemMatch": {"project_id": project_id, "flag_project_exam": "OK",
-                                       "report_grade": {"$exists": False}}}
+                    "project_grades": {"$elemMatch": {"project_id": project_id, "flag_project_exam": "NO_REPORT"}}
                 },
                 {  # case only project is in the current exam session
-                    "has_been_verbalized": False,
                     "written_grades": {"$elemMatch": {"date": {'$ne': written_id}, "flag_written_exam": "OK"}},
-                    "project_grades": {
-                        "$elemMatch": {"project_id": project_id, "flag_project_exam": "OK",
-                                       "report_grade": {"$exists": False}}}
+                    "project_grades": {"$elemMatch": {"project_id": project_id, "flag_project_exam": "NO_REPORT"}}
                 },
                 {  # case only written is in the current exam session
-                    "has_been_verbalized": False,
-                    "written_grades": {
-                        "$elemMatch": {"date": written_id, "flag_written_exam": "OK"}},
+                    "written_grades": {"$elemMatch": {"date": written_id, "flag_written_exam": "OK"}},
                     "project_grades": {
-                        "$elemMatch": {"project_id": {'$ne': project_id}, "flag_project_exam": "OK",
-                                       "report_grade": {"$exists": False}}}
+                        "$elemMatch": {"project_id": {'$ne': project_id}, "flag_project_exam": "NO_REPORT"}}
                 }
             ]
         })
-        return [self.db_id.get_student_id_from(student['db_id']) for student in students]
+        return {(student['project_grades'][-1]['team_info']['Student ID # 1'],
+                 student['project_grades'][-1]['team_info']['Student ID # 2'])
+                for student in students}
 
     def get_all_students_current_appeal(self):
         """Get the student ID of the students that have to correct their report from the current exam session"""
@@ -152,11 +145,11 @@ class MongoDBStudentGrade:
                     "written_grades.date": written_id,
                     "project_grades.project_id": project_id
                 },
-                {  # case both written and project are in the current exam session
+                {  # case only project is in the current exam session
                     "written_grades.date": {'$ne': written_id},
                     "project_grades.project_id": project_id
                 },
-                {  # case both written and project are in the current exam session
+                {  # case only written is in the current exam session
                     "written_grades.date": written_id,
                     "project_grades.project_id": {'$ne': project_id}
                 },

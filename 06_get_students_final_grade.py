@@ -6,7 +6,7 @@ STUDENTS_ID_CORRECT_SAVE_FILE = "students_id_to_correct.json"
 
 
 def main():
-    student_db = MongoDBStudentGrade(database_name="DSL_grade_dbs")
+    student_db = MongoDBStudentGrade(database_name="DSL_grade")
     # all the students tha satisfy the following conditions:
     # 1. have participated in the last project (the project is associated with the last leaderboard ingested)
     # 2. The project contains both leaderboard and report grades
